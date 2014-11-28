@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <dirent.h>
 #include <sys/stat.h>
-#include <io.h>
 
 
 
@@ -233,8 +232,8 @@ void mkdir_p(char *dname)
 			break;
 
 		*p = 0;
-		//mkdir(name, 0777);
-		mkdir(name);
+		mkdir(name, 0777);
+		//mkdir(name);
 		*p = '/';
 		cp = p+1;
 	};

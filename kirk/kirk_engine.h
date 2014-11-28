@@ -1,9 +1,17 @@
 #ifndef KIRK_ENGINE
 #define KIRK_ENGINE
 
+#ifdef __linux__
+#include <asm/types.h>
+
+typedef __u8 u8;
+typedef __u16 u16;
+typedef __u32 u32;
+#else
 typedef unsigned char u8;
 typedef unsigned short int u16;
 typedef unsigned int u32;
+#endif
 
 //Kirk return values
 #define KIRK_OPERATION_SUCCESS 0
