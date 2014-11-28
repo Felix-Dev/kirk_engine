@@ -1,12 +1,14 @@
 CC = gcc
+
 CFLAGS = -Wall -g -O0 -I../kirk
-TARGET = ipld
-OBJS = ipl_decrypt.o
+LDFLAGS = -L../kirk -lkirk
 
-all: $(TARGET)
+all: decipl encipl
 
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $@ $(OBJS) -L ../kirk -lkirk
+decipl: ipl_decrypt.o
+	$(CC) -o $@ $^ $(LDFLAGS)
+encipl: ipl_encrypt.o
+	$(CC) -o $@ $^ $(LDFLAGS)
 
 clean:
-	$(RM) *.o $(TARGET) *.exe *.exe.stackdump
+	rm -f decipl encipl ipl_decrypt.o ipl_encrypt.o

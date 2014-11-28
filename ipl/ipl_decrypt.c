@@ -2,19 +2,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "kirk_engine.h"
+#include "ipl.h"
 
 //IPL-DECRYPTER SAMPLE
 
-typedef struct
-{
-    void *loadaddr;
-    u32 blocksize;
-    void (* entry)(void);
-    u32 checksum;
-    u8 data[0xF50];
-} IplBlock;
-
-void printHEX(int hex)
+static void printHEX(int hex)
 {
 	if(hex < 0x10) printf("0%X", hex);
 	else printf("%X", hex);
@@ -47,7 +39,7 @@ void PrintKIRK1Header(u8* buf)
     printf("\nmode: %d, data_size 0x%X, data_offset 0x%X\n", header->mode, header->data_size, header->data_offset);
 }
 
-int DecryptIplBlock(void *dst, const void *src)
+int DecryptIplBlock(IplBlock *dst, const IplEncBlock *src)
 {
     //PrintKIRK1Header((void*)src);
     int ret = kirk_CMD1(dst, (void*)src, 0x1000);
@@ -59,26 +51,12 @@ int DecryptIplBlock(void *dst, const void *src)
     return 0;
 }
 
-u32 _memcpy(void *dst, const void *src, int size)
-{
-	int i;
-	u32 checksum = 0;
-
-	for (i=0; i<size; i+=4)
-	{
-		*(u32*)(dst+i) = *(u32*)(src+i);
-		checksum += *(u32*)(src+i);
-	}
-
-	return(checksum);
-}
-
 #define MAX_NUM_IPLBLOCKS    (0x80)
 #define MAX_IPL_SIZE         (0x80000)
 
 u8 ipl[MAX_IPL_SIZE]; // buffer for IPL
-u8 buf[0x1000];       // temp buffer for one 4KB encrypted IPL block
 IplBlock decblk;      // decrypted IPL block
+IplEncBlock encblk;   // temp buffer for one 4KB encrypted IPL block
 
 int main()
 {
@@ -98,13 +76,13 @@ int main()
     kirk_init(); 
     
     //decrypt all encrypted IPL blocks
-    for (i=0; i<size_enc/0x1000; i++)
+    for (i=0; i<size_enc/sizeof(encblk); i++)
     {
         // load a single encrypted IPL block (4KB block)
-        _memcpy(buf, ipl + i*0x1000, 0x1000);
+        memcpy(&encblk, ipl + i*sizeof(encblk), sizeof(encblk));
 
         // decrypt the ipl block
-        if (DecryptIplBlock(&decblk, buf) != 0)
+        if (DecryptIplBlock(&decblk, &encblk) != 0)
         {
             printf("IPL block decryption failed! iplblk - %d \n", i);
             error = 1;
@@ -122,7 +100,7 @@ int main()
         // copy the 'data' section of the decrypted IPL block
         if (decblk.loadaddr)
         {
-            checksum = _memcpy(ipl+size, decblk.data, decblk.blocksize);
+            checksum = iplMemcpy(ipl+size, decblk.data, decblk.blocksize);
             size += decblk.blocksize;
         }
 
