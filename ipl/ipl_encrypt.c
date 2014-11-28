@@ -7,7 +7,7 @@
 
 //IPL-ENCRYPTER SAMPLE
 
-int EncryptIplBlock(IplEncBlock *dst, const void *src)
+int EncryptiplBlk(iplEncBlk *dst, const void *src)
 {
     int ret = kirk_CMD0(dst, (void*)src, 0xFD0);
     if(ret == KIRK_NOT_ENABLED){ printf("KIRK not enabled!\n"); return -1;}
@@ -18,19 +18,19 @@ int EncryptIplBlock(IplEncBlock *dst, const void *src)
     return 0;
 }
 
-u8 ipl[MAX_IPLBLOCK_DATA_SIZE * MAX_NUM_IPLBLOCKS]; // buffer for IPL
+u8 ipl[MAX_IPLBLK_DATA_SIZE * MAX_NUM_IPLBLKS]; // buffer for IPL
 struct {
-    KIRK_CMD1_HEADER header;
-    u8 data[3904];
+    KIRK_CMD1_HEADER hdr;
+    u8 data[sizeof(iplBlk)];
 } buf;
-IplEncBlock encblk; // temp buffer for one 4KB encrypted IPL block
+iplEncBlk encblk; // temp buffer for one 4KB encrypted IPL block
 
 int main(int argc, char **argv)
 {
     unsigned long int entry;
     int cur;
-    u32 checksum = 0;
-    IplBlock *bufBlock;
+    u32 hash = 0;
+    iplBlk *bufBlock;
 
     if (argc != 2) {
         printf("usage: %s entry\n", argv[0]);
@@ -57,20 +57,20 @@ int main(int argc, char **argv)
 
     FILE *out = fopen("enc_ipl.bin", "wb");
 
-    buf.header.mode = KIRK_MODE_CMD1;
-    buf.header.ecdsa = 0;
-    buf.header.data_offset = 0x200;
+    buf.hdr.mode = KIRK_MODE_CMD1;
+    buf.hdr.ecdsa = 0;
+    buf.hdr.data_offset = 0x200;
 
-    bufBlock = (IplBlock *)(buf.data + buf.header.data_offset);
-    bufBlock->loadaddr = entry;
-    bufBlock->blocksize = 3392;
+    bufBlock = (iplBlk *)(buf.data + buf.hdr.data_offset);
+    bufBlock->addr = entry;
+    bufBlock->size = 3392;
     bufBlock->entry = 0;
-    bufBlock->checksum = 0;
-    checksum = iplMemcpy(bufBlock->data, ipl, bufBlock->blocksize);
+    bufBlock->hash = 0;
+    hash = iplMemcpy(bufBlock->data, ipl, bufBlock->size);
 
-    buf.header.data_size = offsetof(IplBlock, data) + bufBlock->blocksize;
+    buf.hdr.data_size = offsetof(iplBlk, data) + bufBlock->size;
 
-    if (EncryptIplBlock(&encblk, &buf) != 0)
+    if (EncryptiplBlk(&encblk, &buf) != 0)
     {
         printf("IPL block encryption failed!\n");
         fclose(out);
@@ -79,24 +79,24 @@ int main(int argc, char **argv)
 
     fwrite(&encblk, sizeof(encblk), 1, out);
 
-    buf.header.data_offset = 0x10;
+    buf.hdr.data_offset = 0x10;
     
-    bufBlock = (IplBlock *)(buf.data + buf.header.data_offset);
-    bufBlock->blocksize = 3888;
+    bufBlock = (iplBlk *)(buf.data + buf.hdr.data_offset);
+    bufBlock->size = 3888;
     bufBlock->entry = 0;
 
-    buf.header.data_size = offsetof(IplBlock, data) + bufBlock->blocksize;
+    buf.hdr.data_size = offsetof(iplBlk, data) + bufBlock->size;
 
     //encrypt all decrypted IPL blocks
-    for (cur = bufBlock->blocksize; cur + bufBlock->blocksize < size_dec; cur += bufBlock->blocksize)
+    for (cur = bufBlock->size; cur + bufBlock->size < size_dec; cur += bufBlock->size)
     {
-        bufBlock->loadaddr = entry + cur;
-        bufBlock->checksum = checksum;
+        bufBlock->addr = entry + cur;
+        bufBlock->hash = hash;
         // load a single decrypted IPL block
-        checksum = iplMemcpy(bufBlock->data, ipl + cur, bufBlock->blocksize);
+        hash = iplMemcpy(bufBlock->data, ipl + cur, bufBlock->size);
 
         // encrypt the ipl block
-        if (EncryptIplBlock(&encblk, &buf) != 0)
+        if (EncryptiplBlk(&encblk, &buf) != 0)
         {
             printf("IPL block encryption failed!\n");
             fclose(out);
@@ -106,17 +106,17 @@ int main(int argc, char **argv)
         fwrite(&encblk, sizeof(encblk), 1, out);
     }
 
-    buf.header.ecdsa = 1;
+    buf.hdr.ecdsa = 1;
 
-    bufBlock->loadaddr = entry + cur;
-    bufBlock->blocksize = size_dec - cur;
+    bufBlock->addr = entry + cur;
+    bufBlock->size = size_dec - cur;
     bufBlock->entry = entry;
-    bufBlock->checksum = checksum;
-    memcpy(bufBlock->data, ipl + cur, bufBlock->blocksize);
+    bufBlock->hash = hash;
+    memcpy(bufBlock->data, ipl + cur, bufBlock->size);
 
-    buf.header.data_size = offsetof(IplBlock, data) + bufBlock->blocksize;
+    buf.hdr.data_size = offsetof(iplBlk, data) + bufBlock->size;
 
-    if (EncryptIplBlock(&encblk, &buf) != 0)
+    if (EncryptiplBlk(&encblk, &buf) != 0)
     {
         printf("IPL block encryption failed!\n");
         fclose(out);

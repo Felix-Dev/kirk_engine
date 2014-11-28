@@ -39,7 +39,7 @@ void PrintKIRK1Header(u8* buf)
     printf("\nmode: %d, data_size 0x%X, data_offset 0x%X\n", header->mode, header->data_size, header->data_offset);
 }
 
-int DecryptIplBlock(IplBlock *dst, const IplEncBlock *src)
+int DecryptiplBlk(iplBlk *dst, const iplEncBlk *src)
 {
     //PrintKIRK1Header((void*)src);
     int ret = kirk_CMD1(dst, (void*)src, 0x1000);
@@ -51,19 +51,16 @@ int DecryptIplBlock(IplBlock *dst, const IplEncBlock *src)
     return 0;
 }
 
-#define MAX_NUM_IPLBLOCKS    (0x80)
-#define MAX_IPL_SIZE         (0x80000)
-
 u8 ipl[MAX_IPL_SIZE]; // buffer for IPL
-IplBlock decblk;      // decrypted IPL block
-IplEncBlock encblk;   // temp buffer for one 4KB encrypted IPL block
+iplBlk decblk;      // decrypted IPL block
+iplEncBlk encblk;   // temp buffer for one 4KB encrypted IPL block
 
 int main()
 {
     int i;
     int size = 0;
     int error = 0;
-    u32 checksum = 0;
+    u32 hash = 0;
 	//Open the file to decrypt, get it's size
     FILE *in = fopen("enc_ipl.bin", "rb");
     fseek(in, 0, SEEK_END);
@@ -82,26 +79,26 @@ int main()
         memcpy(&encblk, ipl + i*sizeof(encblk), sizeof(encblk));
 
         // decrypt the ipl block
-        if (DecryptIplBlock(&decblk, &encblk) != 0)
+        if (DecryptiplBlk(&decblk, &encblk) != 0)
         {
             printf("IPL block decryption failed! iplblk - %d \n", i);
             error = 1;
             break;
         }
 
-        // note first block has zero as its checksum
-        if (decblk.checksum != checksum)
+        // note first block has zero as its hash
+        if (decblk.hash != hash)
         {
-            printf("ipl block checksum failed: iplblk - %d, checksum - 0x%08X \n", i, decblk.checksum);
+            printf("ipl block hash failed: iplblk - %d, hash - 0x%08X \n", i, decblk.hash);
             error = 1;
             break;
         }
 
         // copy the 'data' section of the decrypted IPL block
-        if (decblk.loadaddr)
+        if (decblk.addr)
         {
-            checksum = iplMemcpy(ipl+size, decblk.data, decblk.blocksize);
-            size += decblk.blocksize;
+            hash = iplMemcpy(ipl+size, decblk.data, decblk.size);
+            size += decblk.size;
         }
 
         // reached the last IPL block, save it
