@@ -1,7 +1,7 @@
 CC = gcc
 
 CFLAGS = -Wall -g -O0 -I../kirk
-LDFLAGS = -L../kirk -lkirk
+LDFLAGS = -L../kirk -lrt -lkirk
 
 all: decipl encipl
 
