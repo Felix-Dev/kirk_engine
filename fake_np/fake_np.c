@@ -35,38 +35,6 @@ static int zero_lz_size = 0x50;
 
 /*************************************************************/
 
-FILE *open_file(char *name, int *size)
-{
-	FILE *fp;
-
-	fp = fopen(name, "rb");
-	if(fp==NULL){
-		//printf("Open file %s failed!\n", name);
-		return NULL;
-	}
-
-	fseek(fp, 0, SEEK_END);
-	*size = ftell(fp);
-	fseek(fp, 0, SEEK_SET);
-
-	return fp;
-}
-
-u8 *load_file(char *name, int *size)
-{
-	FILE *fp;
-	u8 *buf;
-
-	fp = open_file(name, size);
-	if(fp==NULL)
-		return NULL;
-	buf = malloc(*size);
-	fread(buf, *size, 1, fp);
-	fclose(fp);
-
-	return buf;
-}
-
 u8 *load_file_from_ISO(const char *iso, char *name, int *size)
 {
 	int ret;
@@ -98,20 +66,6 @@ u8 *load_file_from_ISO(const char *iso, char *name, int *size)
 
 	isoClose();
 	return buf;
-}
-
-int write_file(char *file, void *buf, int size)
-{
-	FILE *fp;
-	int written;
-
-	fp = fopen(file, "wb");
-	if(fp==NULL)
-		return -1;
-	written = fwrite(buf, 1, size, fp);
-	fclose(fp);
-
-	return written;
 }
 
 /*************************************************************/

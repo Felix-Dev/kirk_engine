@@ -9,7 +9,7 @@ void hex_dump(const char *str, void *addr, int size);
 
 
 FILE *open_file(char *name, int *size);
-u8 *load_file(char *name, int *size);
+void *load_file(char *name, int *size);
 int write_file(char *file, void *buf, int size);
 
 int walk_dir(char *dname, void *func_ptr, int verbose);

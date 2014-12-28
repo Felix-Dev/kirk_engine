@@ -22,22 +22,6 @@ u8 header[0x100];
 
 /*****************************************************************************/
 
-int write_file(char *file, void *buf, int size)
-{
-	FILE *fp;
-	int written;
-
-	fp = fopen(file, "wb");
-	if(fp==NULL)
-		return -1;
-	written = fwrite(buf, 1, size, fp);
-	fclose(fp);
-
-	return written;
-}
-
-/*****************************************************************************/
-
 int main(int argc, char *argv[])
 {
 	int table_size, retv;
