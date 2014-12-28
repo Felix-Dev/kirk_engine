@@ -235,7 +235,7 @@ int decrypt_base(NPBASE *npb)
 
 	npb->total_block = total_block;
 	npb->block_size = block_size;
-	npb->max_size = (total_block-1)*block_size;
+	npb->max_size = total_block*block_size;
 
 	retv = sfo_getkey(npb->param_sfo, "DISC_ID", npb->name);
 	if(retv<0)
