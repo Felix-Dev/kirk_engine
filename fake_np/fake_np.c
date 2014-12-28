@@ -355,7 +355,6 @@ void save_base(NPBASE *np)
 	offset += np->param_sfo_size;
 
 	*(u32*)(pbp_header+0x0c) = offset;
-	offset = (offset+15)&~15;
 	*(u32*)(pbp_header+0x10) = offset;
 	*(u32*)(pbp_header+0x14) = offset;
 	*(u32*)(pbp_header+0x18) = offset;
@@ -365,13 +364,11 @@ void save_base(NPBASE *np)
 	*(u32*)(pbp_header+0x20) = offset;
 	memcpy(pbp_header+offset, np->data_psp, np->data_psp_size);
 	offset += np->data_psp_size;
-	offset = (offset+15)&~15;
 
 	// data.psar
 	*(u32*)(pbp_header+0x24) = offset;
 	memcpy(pbp_header+offset, np->np_header, 256);
 	offset += 256;
-	offset = (offset+15)&~15;
 
 	// write PBP file
 	sprintf(name, "%s.PBP", np->name);
@@ -443,7 +440,6 @@ int write_pbp_part1(NPBASE *np, FILE *fp, char *iso_name)
 	*(u32*)(pbp_header+0x0c) = offset;
 	memcpy(pbp_header+offset, ico0_buf, ico0_size);
 	offset += ico0_size;
-	offset = (offset+15)&~15;
 
 	// icon1.pmf
 	if(ico1_size)
@@ -451,7 +447,6 @@ int write_pbp_part1(NPBASE *np, FILE *fp, char *iso_name)
 	*(u32*)(pbp_header+0x10) = offset;
 	memcpy(pbp_header+offset, ico1_buf, ico1_size);
 	offset += ico1_size;
-	offset = (offset+15)&~15;
 
 	// pic0.png
 	if(pic0_size)
@@ -459,7 +454,6 @@ int write_pbp_part1(NPBASE *np, FILE *fp, char *iso_name)
 	*(u32*)(pbp_header+0x14) = offset;
 	memcpy(pbp_header+offset, pic0_buf, pic0_size);
 	offset += pic0_size;
-	offset = (offset+15)&~15;
 
 	// pic1.png
 	if(pic1_size)
@@ -467,7 +461,6 @@ int write_pbp_part1(NPBASE *np, FILE *fp, char *iso_name)
 	*(u32*)(pbp_header+0x18) = offset;
 	memcpy(pbp_header+offset, pic1_buf, pic1_size);
 	offset += pic1_size;
-	offset = (offset+15)&~15;
 
 	// snd0.at3
 	if(snd0_size)
@@ -475,21 +468,18 @@ int write_pbp_part1(NPBASE *np, FILE *fp, char *iso_name)
 	*(u32*)(pbp_header+0x1c) = offset;
 	memcpy(pbp_header+offset, snd0_buf, snd0_size);
 	offset += snd0_size;
-	offset = (offset+15)&~15;
 
 	// data.psp
 	printf("  write DATA.PSP ...\n");
 	*(u32*)(pbp_header+0x20) = offset;
 	memcpy(pbp_header+offset, np->data_psp, np->data_psp_size);
 	offset += np->data_psp_size;
-	offset = (offset+15)&~15;
 
 	// data.psar
 	printf("  write DATA.PSAR ...\n");
 	*(u32*)(pbp_header+0x24) = offset;
 	memcpy(pbp_header+offset, np->np_header, 256);
 	offset += 256;
-	offset = (offset+15)&~15;
 
 	// write part 1
 	fwrite(pbp_header, offset, 1, fp);
@@ -732,7 +722,6 @@ int main(int argc, char *argv[])
 		encrypt_table(tb);
 
 		// write iso data
-		wsize = (wsize+15)&~15;
 		fwrite(wbuf, wsize, 1, pbp_fp);
 
 		// update offset
