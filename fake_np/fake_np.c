@@ -13,10 +13,6 @@
 
 #include "isoreader.h"
 
-#include "NPJH90126.h"
-#include "NPJH90157.h"
-#include "NPJH90252.h"
-
 /*************************************************************/
 
 #define RATIO_LIMIT 90
@@ -158,43 +154,6 @@ typedef struct {
 	u8 key[16];
 }NPBASE;
 
-NPBASE npbase_list[] = {
-	{
-		"NPJH90126",
-		NPJH90126_param_sfo,
-		NPJH90126_param_sfo_size,
-		NPJH90126_data_psp,
-		NPJH90126_data_psp_size,
-		NPJH90126_np_header,
-	},
-	{
-		"NPJH90157",
-		NPJH90157_param_sfo,
-		NPJH90157_param_sfo_size,
-		NPJH90157_data_psp,
-		NPJH90157_data_psp_size,
-		NPJH90157_np_header,
-	},
-	{
-		"NPJH90252",
-		NPJH90252_param_sfo,
-		NPJH90252_param_sfo_size,
-		NPJH90252_data_psp,
-		NPJH90252_data_psp_size,
-		NPJH90252_np_header,
-	},
-	{
-		"",
-		NULL,
-		0,
-		NULL,
-		0,
-		NULL,
-	},
-};
-
-int nr_npbase = 3;
-
 int decrypt_base(NPBASE *npb)
 {
 	MAC_KEY mkey;
@@ -246,25 +205,6 @@ int decrypt_base(NPBASE *npb)
 		strcpy(npb->sys_ver, "6.20");
 
 	return 0;
-}
-
-NPBASE *find_base(int size)
-{
-	NPBASE *npb, *max_np;
-
-	npb = npbase_list;
-	max_np = &npbase_list[0];
-	while(npb->data_psp_size){
-		decrypt_base(npb);
-		if(size<npb->max_size)
-			return npb;
-		if(max_np->max_size<npb->max_size)
-			max_np = npb;
-		npb ++;
-	}
-
-	// return biggest one
-	return max_np;
 }
 
 NPBASE *load_base(char *filename)
@@ -566,7 +506,7 @@ int main(int argc, char *argv[])
 	CIPHER_KEY ckey;
 	FILE *iso_fp, *pbp_fp;
 	char *npb_name, *iso_name, *pbp_name;
-	int i, ap, do_comp, do_crypt, do_save_base, builtin_base;
+	int i, ap, do_comp, do_crypt, do_save_base;
 	int total_block, block_size;
 	int iso_size, iso_offset, iso_block;
 	int table_offset, table_size;
@@ -579,7 +519,6 @@ int main(int argc, char *argv[])
 	do_comp = 0;
 	do_crypt = 1;
 	do_save_base = 0;
-	builtin_base = 1;
 	np_base = NULL;
 
 	// parameter process
@@ -589,7 +528,6 @@ int main(int argc, char *argv[])
 				if(ap+1==argc)
 					goto _help;
 				npb_name = argv[ap+1];
-				builtin_base = 0;
 				ap += 1;
 			}else if(argv[ap][1]=='c'){
 				do_comp = 1;
@@ -617,27 +555,20 @@ int main(int argc, char *argv[])
 	if(pbp_name==NULL)
 		pbp_name = "EBOOT.PBP";
 
-	if(builtin_base==0){
-		np_base = load_base(npb_name);
-		if(np_base==NULL){
-			printf("Load base %s faield!\n", npb_name);
-			goto _help;
-		}
-		show_npinfo(np_base);
-		if(do_save_base==1){
-			save_base(np_base);
-		}
+	np_base = load_base(npb_name);
+	if(np_base==NULL){
+		printf("Load base %s faield!\n", npb_name);
+		goto _help;
+	}
+	show_npinfo(np_base);
+	if(do_save_base==1){
+		save_base(np_base);
 	}
 
 	iso_fp = open_file(iso_name, &iso_size);
 	if(iso_fp==NULL){
 		printf("Open file %s faield!\n", iso_name);
 		goto _help;
-	}
-
-	if(builtin_base==1){
-		np_base = find_base(iso_size);
-		show_npinfo(np_base);
 	}
 
 	if(iso_size>np_base->max_size){
@@ -771,7 +702,7 @@ _help:
 	printf("\n");
 	printf("fake_np v1.0 by tpu\n");
 	printf(" usage: fake_np [-b base_name] [-c] [-e] [iso_name] [pbp_name]\n");
-	printf("    -b base_name: select a valid PSN game as base. if empty, use buitin base.\n");
+	printf("    -b base_name: select a valid PSN game as base.\n");
 	printf("    -w          : work with -b, save a small header of game.\n");
 	printf("    -c          : compress data.\n");
 //	printf("    -e          : encrypt data.\n");
