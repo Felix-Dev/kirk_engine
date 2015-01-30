@@ -3,6 +3,7 @@
  *               written by tpu.
  */
 
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -143,7 +144,7 @@ int sceDrmBBMacInit(MAC_KEY *mkey, int type)
 	return 0;
 }
 
-int sceDrmBBMacUpdate(MAC_KEY *mkey, u8 *buf, int size)
+int sceDrmBBMacUpdate(MAC_KEY *mkey, const void *buf, int size)
 {
 	int retv = 0, ksize, p, type;
 	u8 *kbuf;
@@ -171,7 +172,7 @@ int sceDrmBBMacUpdate(MAC_KEY *mkey, u8 *buf, int size)
 
 		size -= mkey->pad_size;
 		// save last data to pad buf
-		memcpy(mkey->pad, buf+size, mkey->pad_size);
+		memcpy(mkey->pad, (void *)((intptr_t)buf + size), mkey->pad_size);
 
 		type = (mkey->type==2)? 0x3A : 0x38;
 
@@ -182,7 +183,7 @@ int sceDrmBBMacUpdate(MAC_KEY *mkey, u8 *buf, int size)
 			if(retv)
 				goto _exit;
 			size -= (ksize-p);
-			buf += ksize-p;
+			buf = (void *)((intptr_t)buf + ksize - p);
 			p = 0;
 		}
 	}
@@ -192,7 +193,7 @@ _exit:
 
 }
 
-int sceDrmBBMacFinal(MAC_KEY *mkey, u8 *buf, u8 *vkey)
+int sceDrmBBMacFinal(MAC_KEY *mkey, void *buf, const void *vkey)
 {
 	int i, retv, code;
 	u8 *kbuf, tmp[16], tmp1[16];
@@ -278,7 +279,7 @@ int sceDrmBBMacFinal(MAC_KEY *mkey, u8 *buf, u8 *vkey)
 
 	if(vkey){
 		for(i=0; i<0x10; i++){
-			tmp1[i] ^= vkey[i];
+			tmp1[i] ^= ((u8 *)vkey)[i];
 		}
 		memcpy(kbuf, tmp1, 16);
 
@@ -302,7 +303,7 @@ _exit:
 	return retv;
 }
 
-int sceDrmBBMacFinal2(MAC_KEY *mkey, u8 *out, u8 *vkey)
+int sceDrmBBMacFinal2(MAC_KEY *mkey, const void *out, const void *vkey)
 {
 	int i, retv, type;
 	u8 *kbuf, tmp[16];
@@ -333,7 +334,7 @@ int sceDrmBBMacFinal2(MAC_KEY *mkey, u8 *out, u8 *vkey)
 	return retv;
 }
 
-int bbmac_build_final2(int type, u8 *mac)
+int bbmac_build_final2(int type, void *mac)
 {
 	u8 *kbuf = kirk_buf+0x14;
 
@@ -347,7 +348,7 @@ int bbmac_build_final2(int type, u8 *mac)
 }
 
 // get key from bbmac
-int bbmac_getkey(MAC_KEY *mkey, u8 *bbmac, u8 *vkey)
+int bbmac_getkey(MAC_KEY *mkey, const void *bbmac, void *vkey)
 {
 	int i, retv, type, code;
 	u8 *kbuf, tmp[16], tmp1[16];
@@ -374,13 +375,13 @@ int bbmac_getkey(MAC_KEY *mkey, u8 *bbmac, u8 *vkey)
 	kirk7(kirk_buf, 0x10, code);
 
 	for(i=0; i<0x10; i++){
-		vkey[i] = tmp[i] ^ kirk_buf[i];
+		((u8 *)vkey)[i] = tmp[i] ^ kirk_buf[i];
 	}
 
 	return 0;
 }
 
-int bbmac_forge(MAC_KEY *mkey, u8 *bbmac, u8 *vkey, u8 *buf)
+int bbmac_forge(MAC_KEY *mkey, const void *bbmac, const void *vkey, void *buf)
 {
 	int i, retv, type;
 	u8 *kbuf, tmp[16], tmp1[16];
@@ -451,7 +452,7 @@ int bbmac_forge(MAC_KEY *mkey, u8 *bbmac, u8 *vkey, u8 *buf)
 
 	memcpy(tmp1, kirk_buf, 0x10);
 	for(i=0; i<0x10; i++){
-		tmp1[i] ^= vkey[i];
+		tmp1[i] ^= ((u8 *)vkey)[i];
 	}
 	for(i=0; i<0x10; i++){
 		tmp1[i] ^= loc_1CD4[i];
@@ -467,7 +468,7 @@ int bbmac_forge(MAC_KEY *mkey, u8 *bbmac, u8 *vkey, u8 *buf)
 
 	// modify the last 16 bytes
 	for(i=0; i<16; i++){
-		buf[i] ^= mkey->pad[i];
+		((u8 *)buf)[i] ^= mkey->pad[i];
 	}
 
 	return 0;
@@ -500,7 +501,7 @@ static int sub_1F8(u8 *buf, int size, u8 *key, int key_type)
 }
 
 
-static int sub_428(u8 *kbuf, u8 *dbuf, int size, CIPHER_KEY *ckey)
+static int sub_428(u8 *kbuf, void *dbuf, int size, CIPHER_KEY *ckey)
 {
 	int i, retv;
 	u8 tmp1[16], tmp2[16];
@@ -542,7 +543,7 @@ static int sub_428(u8 *kbuf, u8 *dbuf, int size, CIPHER_KEY *ckey)
 		return retv;
 
 	for(i=0; i<size; i++){
-		dbuf[i] ^= kbuf[i];
+		((u8 *)dbuf)[i] ^= kbuf[i];
 	}
 
 	return 0;
@@ -552,7 +553,7 @@ static int sub_428(u8 *kbuf, u8 *dbuf, int size, CIPHER_KEY *ckey)
 //       2 use fuse id
 // mode: 1 for encrypt
 //       2 for decrypt
-int sceDrmBBCipherInit(CIPHER_KEY *ckey, int type, int mode, u8 *header_key, u8 *version_key, u32 seed)
+int sceDrmBBCipherInit(CIPHER_KEY *ckey, int type, int mode, void *header_key, const void *version_key, u32 seed)
 {
 	int i, retv;
 	u8 *kbuf;
@@ -562,11 +563,11 @@ int sceDrmBBCipherInit(CIPHER_KEY *ckey, int type, int mode, u8 *header_key, u8 
 	if(mode==2){
 		ckey->seed = seed+1;
 		for(i=0; i<16; i++){
-			ckey->key[i] = header_key[i];
+			ckey->key[i] = ((u8 *)header_key)[i];
 		}
 		if(version_key){
 			for(i=0; i<16; i++){
-				ckey->key[i] ^= version_key[i];
+				ckey->key[i] ^= ((u8 *)version_key)[i];
 			}
 		}
 		retv = 0;
@@ -604,7 +605,7 @@ int sceDrmBBCipherInit(CIPHER_KEY *ckey, int type, int mode, u8 *header_key, u8 
 
 		if(version_key){
 			for(i=0; i<16; i++){
-				ckey->key[i] ^= version_key[i];
+				ckey->key[i] ^= ((u8 *)version_key)[i];
 			}
 		}
 	}else{
@@ -614,7 +615,7 @@ int sceDrmBBCipherInit(CIPHER_KEY *ckey, int type, int mode, u8 *header_key, u8 
 	return retv;
 }
 
-int sceDrmBBCipherUpdate(CIPHER_KEY *ckey, u8 *data, int size)
+int sceDrmBBCipherUpdate(CIPHER_KEY *ckey, const void *data, int size)
 {
 	int p, retv, dsize;
 
@@ -623,7 +624,7 @@ int sceDrmBBCipherUpdate(CIPHER_KEY *ckey, u8 *data, int size)
 
 	while(size>0){
 		dsize = (size>=0x0800)? 0x0800 : size;
-		retv = sub_428(kirk_buf, data+p, dsize, ckey);
+		retv = sub_428(kirk_buf, (void *)((intptr_t)data + p), dsize, ckey);
 		if(retv)
 			break;
 		size -= dsize;
@@ -673,7 +674,7 @@ int sceNpDrmGetFixedKey(u8 *key, char *npstr, int type)
 	if(retv)
 		return retv;
 
-	retv = sceDrmBBMacUpdate(&mkey, (u8*)strbuf, 0x30);
+	retv = sceDrmBBMacUpdate(&mkey, strbuf, 0x30);
 	if(retv)
 		return retv;
 
