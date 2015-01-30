@@ -40,7 +40,6 @@ typedef struct {
 typedef struct {
 	u8 hdrKey[16];
 	u8 verKey[16];
-	u8 hdr[208];
 	u8 *tbl;
 	size_t tblSize;
 	int blkNum;
@@ -55,8 +54,9 @@ static int NpegOpen(np_t *np, FILE *fp, u32 offset)
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
 	int offset_table;
-	u32 *tp;
 	int retv, i;
+	u8 hdr[208];
+	u32 *tp;
 
 	if(fp == NULL || np == NULL) {
 		errno = EFAULT;
@@ -65,52 +65,48 @@ static int NpegOpen(np_t *np, FILE *fp, u32 offset)
 
 	if (fseek(fp, offset, SEEK_SET))
 		return -1;
-	if (fread(np->hdr, sizeof(np->hdr), 1, fp) <= 0)
+	if (fread(hdr, sizeof(hdr), 1, fp) <= 0)
 		return -1;
 
-	// check "NPUMDIMG"
-	if(strncmp((char*)np->hdr, "NPUMDIMG", 8)){
+	if(strncmp((char*)hdr, "NPUMDIMG", 8)){
 		printf("DATA.PSAR isn't a NPUMDIMG!\n");
 		return -7;
 	}
 
-	// bbmac_getkey
 	sceDrmBBMacInit(&mkey, 3);
-	sceDrmBBMacUpdate(&mkey, np->hdr, 0xc0);
-	bbmac_getkey(&mkey, np->hdr + 0xc0, np->verKey);
+	sceDrmBBMacUpdate(&mkey, hdr, 0xc0);
+	bbmac_getkey(&mkey, hdr + 0xc0, np->verKey);
 
-	// np->hdr MAC check
 	sceDrmBBMacInit(&mkey, 3);
-	sceDrmBBMacUpdate(&mkey, np->hdr, 0xc0);
-	retv = sceDrmBBMacFinal2(&mkey, np->hdr+0xc0, np->verKey);
+	sceDrmBBMacUpdate(&mkey, hdr, 0xc0);
+	retv = sceDrmBBMacFinal2(&mkey, hdr + 0xc0, np->verKey);
 	if(retv){
-		printf("NP np->hdr MAC check failed!\n");
+		printf("NP Header MAC check failed!\n");
 		return -13;
 	}
 
-	// decrypt NP np->hdr
-	memcpy(np->hdrKey, np->hdr+0xa0, 0x10);
+	memcpy(np->hdrKey, hdr + 0xa0, 0x10);
 	sceDrmBBCipherInit(&ckey, 1, 2, np->hdrKey, np->verKey, 0);
-	sceDrmBBCipherUpdate(&ckey, np->hdr+0x40, 0x60);
+	sceDrmBBCipherUpdate(&ckey, hdr + 0x40, 0x60);
 	sceDrmBBCipherFinal(&ckey);
 
 	printf("NPUMDIMG Version Key: 0x");
 	for (i = 0; i < 16; i++)
 		printf("%02X", np->verKey[i]);
-	printf("\nNPUMDIMG np->hdr Key:  0x");
+	printf("\nNPUMDIMG Header Key:  0x");
 	for (i = 0; i < 16; i++)
 		printf("%02X", np->hdrKey[i]);
 	putchar('\n');
 
-	np->lbaStart = *(u32 *)(np->hdr + 0x54);
-	np->lbaEnd = *(u32 *)(np->hdr + 0x64);
+	np->lbaStart = *(u32 *)(hdr + 0x54);
+	np->lbaEnd = *(u32 *)(hdr + 0x64);
 	np->lbaSize = np->lbaEnd - np->lbaStart + 1;
 
 	np->blkNum = np->tblSize / 32;
-	np->blkSize = *(u32 *)(np->hdr + 0x0c);
+	np->blkSize = *(u32 *)(hdr + 0x0c);
 	np->blkNum = (np->lbaSize + np->blkSize - 1) / np->blkSize;
 
-	offset_table = *(u32*)(np->hdr+0x6c); // table offset
+	offset_table = *(u32*)(hdr + 0x6c); // table offset
 	fseek(fp, offset + offset_table, SEEK_SET);
 
 	np->tblSize = np->blkNum*32;
@@ -377,11 +373,9 @@ int main(int argc, char *argv[])
 		return errno;
 	}
 
-	printf("ISO name: %s.iso\n", np.hdr+0x70);
 	printf("ISO size: %zd MB\n", np.lbaSize * 2048 / 0x100000);
 
-	sprintf(iso_name, "%s.iso", np.hdr+0x70);
-	out = fopen(iso_name, "wb");
+	out = fopen("NP.ISO", "wb");
 	if(out == NULL){
 		perror(iso_name);
 		return errno;
