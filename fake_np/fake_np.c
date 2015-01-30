@@ -3,6 +3,7 @@
  *                written by tpu.
  */
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -207,60 +208,82 @@ int decrypt_base(NPBASE *npb)
 	return 0;
 }
 
+#define PBP_MAGIC 0x50425000
+
+struct pbpHdr {
+	u32 magic;
+	u32 ver;
+	u32 param_offset;
+	u32 icon0_offset;
+	u32 icon1_offset;
+	u32 pic0_offset;
+	u32 pic1_offset;
+	u32 snd0_offset;
+	u32 psp_offset;
+	u32 psar_offset;
+};
+
 NPBASE *load_base(char *filename)
 {
+	struct pbpHdr hdr;
 	NPBASE *npb;
 	FILE *fp;
-	u8 tmp_header[256];
 	int retv;
-	u32 *pbp_table;
-
 
 	// Open and check PBP file
 	fp = fopen(filename, "rb");
-	if(fp==NULL){
+	if(fp == NULL) {
 		printf("Open NP.PBP failed!\n");
 		return NULL;
 	}
 
-	fread(tmp_header, 0x28, 1, fp);
-	if(*(u32*)(tmp_header)!=0x50425000){
+	if (fread(&hdr, sizeof(hdr), 1, fp) <= 0)
+		return NULL;
+	if(hdr.magic != PBP_MAGIC) {
 		printf("Not a valid PBP file!\n");
 		return NULL;
 	}
-	pbp_table = (u32*)(tmp_header+8);
-
 
 	// load NPBASE content
 	npb = (NPBASE*)malloc(sizeof(NPBASE));
+	if (npb == NULL)
+		return NULL;
 	memset(npb, 0, sizeof(NPBASE));
 
-	npb->param_sfo_size = pbp_table[1]-pbp_table[0];
-	npb->data_psp_size = pbp_table[7]-pbp_table[6];
+	npb->param_sfo_size = hdr.icon0_offset - hdr.param_offset;
+	npb->data_psp_size = hdr.psar_offset - hdr.psp_offset;
 
 	// load PARAM.SFO
 	npb->param_sfo = malloc(npb->param_sfo_size);
-	fseek(fp, pbp_table[0], SEEK_SET);
-	fread(npb->param_sfo, npb->param_sfo_size, 1, fp);
+	if (npb->param_sfo == NULL)
+		return NULL;
+	if (fseek(fp, hdr.param_offset, SEEK_SET))
+		return NULL;
+	if (fread(npb->param_sfo, npb->param_sfo_size, 1, fp) <= 0)
+		return NULL;
 
 	// load DATA.PSP
 	npb->data_psp = malloc(npb->data_psp_size);
-	fseek(fp, pbp_table[6], SEEK_SET);
-	fread(npb->data_psp, npb->data_psp_size, 1, fp);
+	if (fseek(fp, hdr.psp_offset, SEEK_SET))
+		return NULL;
+	if (fread(npb->data_psp, npb->data_psp_size, 1, fp) <= 0)
+		return NULL;
 
 	// load DATA.PSAR
 	npb->np_header = malloc(256);
-	fseek(fp, pbp_table[7], SEEK_SET);
-	fread(npb->np_header, 256, 1, fp);
+	if (fseek(fp, hdr.psar_offset, SEEK_SET))
+		return NULL;
+	if (fread(npb->np_header, 256, 1, fp) <= 0)
+		return NULL;
 
-	fclose(fp);
+	if (fclose(fp))
+		perror("base: warning");
 
 	if(strncmp((char*)npb->np_header, "NPUMDIMG", 8)){
 		printf("DATA.PSAR isn't a NPUMDIMG!\n");
 		free(npb);
 		return NULL;
 	}
-
 
 	retv = decrypt_base(npb);
 	if(retv)
@@ -369,54 +392,54 @@ int write_pbp_part1(NPBASE *np, FILE *fp, char *iso_name)
 	offset = 0x28;
 
 	// param.sfo
-	printf("  write PARAM.SFO ...\n");
+	printf("  writing PARAM.SFO ...\n");
 	*(u32*)(pbp_header+0x08) = offset;
 	memcpy(pbp_header+offset, np->param_sfo, np->param_sfo_size);
 	offset += np->param_sfo_size;
 
 	// icon0.png
 	if(ico0_size)
-		printf("  write ICON0.PNG ...\n");
+		printf("  writing ICON0.PNG ...\n");
 	*(u32*)(pbp_header+0x0c) = offset;
 	memcpy(pbp_header+offset, ico0_buf, ico0_size);
 	offset += ico0_size;
 
 	// icon1.pmf
 	if(ico1_size)
-		printf("  write ICON1.PMF ...\n");
+		printf("  writing ICON1.PMF ...\n");
 	*(u32*)(pbp_header+0x10) = offset;
 	memcpy(pbp_header+offset, ico1_buf, ico1_size);
 	offset += ico1_size;
 
 	// pic0.png
 	if(pic0_size)
-		printf("  write PIC0.PNG ...\n");
+		printf("  writing PIC0.PNG ...\n");
 	*(u32*)(pbp_header+0x14) = offset;
 	memcpy(pbp_header+offset, pic0_buf, pic0_size);
 	offset += pic0_size;
 
 	// pic1.png
 	if(pic1_size)
-		printf("  write PIC1.PNG ...\n");
+		printf("  writing PIC1.PNG ...\n");
 	*(u32*)(pbp_header+0x18) = offset;
 	memcpy(pbp_header+offset, pic1_buf, pic1_size);
 	offset += pic1_size;
 
 	// snd0.at3
 	if(snd0_size)
-		printf("  write SND0.AT3 ...\n");
+		printf("  writing SND0.AT3 ...\n");
 	*(u32*)(pbp_header+0x1c) = offset;
 	memcpy(pbp_header+offset, snd0_buf, snd0_size);
 	offset += snd0_size;
 
 	// data.psp
-	printf("  write DATA.PSP ...\n");
+	printf("  writing DATA.PSP ...\n");
 	*(u32*)(pbp_header+0x20) = offset;
 	memcpy(pbp_header+offset, np->data_psp, np->data_psp_size);
 	offset += np->data_psp_size;
 
 	// data.psar
-	printf("  write DATA.PSAR ...\n");
+	printf("  writing DATA.PSAR ...\n");
 	*(u32*)(pbp_header+0x24) = offset;
 	memcpy(pbp_header+offset, np->np_header, 256);
 	offset += 256;
@@ -558,6 +581,7 @@ int main(int argc, char *argv[])
 	np_base = load_base(npb_name);
 	if(np_base==NULL){
 		printf("Load base %s faield!\n", npb_name);
+		perror(NULL);
 		goto _help;
 	}
 	show_npinfo(np_base);
@@ -609,14 +633,16 @@ int main(int argc, char *argv[])
 	iso_buf = malloc(block_size*2);
 	lzrc_buf = malloc(block_size*2);
 
-	printf("  write iso block ...\n");
 	// process iso block
 	for(i=0; i<iso_block; i++){
 		u8 *tb = table_buf+i*0x20;
 		u8 *wbuf;
 		int wsize, lzrc_size, ratio;
 
-		fread(iso_buf, block_size, 1, iso_fp);
+		if (fread(iso_buf, block_size, 1, iso_fp) <= 0) {
+			perror(iso_name);
+			return -1;
+		}
 
 		wbuf = iso_buf;
 		wsize = block_size;
@@ -653,13 +679,17 @@ int main(int argc, char *argv[])
 		encrypt_table(tb);
 
 		// write iso data
-		fwrite(wbuf, wsize, 1, pbp_fp);
+		if (fwrite(wbuf, wsize, 1, pbp_fp) != 1) {
+			putchar('\n');
+			perror(pbp_name);
+			return -1;
+		}
 
 		// update offset
 		iso_offset += wsize;
-		printf("\r    %02d%%    ", i*100/iso_block);
+		printf("\r  writing iso block ... %02d%%", i*100/iso_block);
 	}
-	printf("\r    100%%\n");
+	putchar('\n');
 
 	// process remain block
 	fwrite(zero_lz, zero_lz_size, 1, pbp_fp);
