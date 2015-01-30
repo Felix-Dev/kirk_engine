@@ -13,13 +13,6 @@
 
 /*****************************************************************************/
 
-static u8 table[0x400000];
-static u8 data_buf[0x100000];
-static u8 decrypt_buf[0x200000];
-static u8 header[0x100];
-
-/*****************************************************************************/
-
 static u8 header_key[16];
 static u8 *np_table;
 static int total_blocks;
@@ -252,6 +245,10 @@ int main(int argc, char *argv[])
 	char iso_name[64];
 	uint64_t magic;
 	u32 offset, size;
+	u8 table[0x400000];
+	u8 data_buf[0x100000];
+	u8 decrypt_buf[0x200000];
+	u8 header[0x100];
 	FILE *in, *out;
 
 	printf("NP Decryptor for PC. Writen by tpu.\n");
