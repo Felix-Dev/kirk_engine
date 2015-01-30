@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -I../kirk -I../common
 TARGET = npdpc
-OBJS = my_npd.o npeg.o libccc.o tlzrc.o ../common/utils.o
+OBJS = my_npd.o libccc.o tlzrc.o ../common/utils.o
 
 ifeq ($(DEBUG), 1)
 CFLAGS+=-g -O0
