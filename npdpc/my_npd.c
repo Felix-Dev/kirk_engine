@@ -28,6 +28,7 @@ u8 version_key[16];
 /*****************************************************************************/
 
 #define PBP_MAGIC 0x50425000
+#define STARTDAT_MAGIC 0x5441445452415453
 
 struct pbpHdr {
 	u32 magic;
@@ -41,6 +42,16 @@ struct pbpHdr {
 	u32 psp_offset;
 	u32 psar_offset;
 };
+
+typedef struct sdHdr {
+	u8 unk0[12];
+	uint64_t magic;
+	u32 unk1;
+	u32 unk2;
+	u32 hdrSize;
+	u32 dataSize;
+	u8 unk3[56];
+} sdHdr;
 
 /*****************************************************************************/
 
@@ -261,18 +272,6 @@ int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int block)
 }
 
 /*****************************************************************************/
-
-#define STARTDAT_MAGIC 0x5441445452415453
-
-typedef struct sdHdr {
-	u8 unk0[12];
-	uint64_t magic;
-	u32 unk1;
-	u32 unk2;
-	u32 hdrSize;
-	u32 dataSize;
-	u8 unk3[56];
-} sdHdr;
 
 int main(int argc, char *argv[])
 {
