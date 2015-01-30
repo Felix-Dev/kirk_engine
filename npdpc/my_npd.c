@@ -57,6 +57,9 @@ static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
 	int retv, i;
 	char hdr[208];
 	uint32_t *tp;
+	uint8_t bbmac[16];
+	uint32_t a0, a1, a2, a3, v0, v1, t0, t1, t2;
+	int msize;
 
 	if(fp == NULL || np == NULL) {
 		errno = EFAULT;
@@ -118,9 +121,6 @@ static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
 		return -18;
 
 	// table mac test
-	int msize;
-	uint8_t bbmac[16];
-
 	sceDrmBBMacInit(&mkey, 3);
 	for(i=0; i<np->tblSize; i+=0x8000){
 		if(i+0x8000>np->tblSize)
@@ -134,8 +134,6 @@ static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
 
 	tp = (uint32_t*)np->tbl;
 	for(i=0; i<np->blkNum; i++){
-		uint32_t a0, a1, a2, a3, v0, v1, t0, t1, t2;
-
 		v1 = tp[0];
 		v0 = tp[1];
 		a0 = tp[2];
