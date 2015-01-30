@@ -355,10 +355,6 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
-	write_file("header.bin", header, 0x100);
-	printf("table_size=%d\n", table_size);
-	printf("Dumped header.\n\n");
-
 	start = *(u32*)(header+0x54); // 0x54 LBA start
 	end   = *(u32*)(header+0x64); // 0x64 LBA end
 	iso_size = (end-start+1)*2048;
