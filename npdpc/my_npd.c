@@ -49,7 +49,7 @@ typedef struct sdHdr {
 
 /*****************************************************************************/
 
-static int NpegOpen(FILE *fp, u32 offset, u8 *header, u8 *table, int *table_size)
+static int NpegOpen(FILE *fp, u32 offset, u8 *header, int *table_size)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
@@ -59,9 +59,8 @@ static int NpegOpen(FILE *fp, u32 offset, u8 *header, u8 *table, int *table_size
 	int retv, i;
 
 	np_header  = header;
-	np_table   = table;
 
-	if(fp == NULL || header == NULL || table == NULL || table_size == NULL) {
+	if(fp == NULL || header == NULL || table_size == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
@@ -115,6 +114,9 @@ static int NpegOpen(FILE *fp, u32 offset, u8 *header, u8 *table, int *table_size
 	fseek(fp, offset + offset_table, SEEK_SET);
 
 	*table_size = total_blocks*32;
+	np_table = malloc(*table_size);
+	if (np_table == NULL)
+		return -1;
 	retv = fread(np_table, *table_size, 1, fp);
 	if(retv!=1)
 		return -18;
@@ -168,8 +170,6 @@ static int NpegOpen(FILE *fp, u32 offset, u8 *header, u8 *table, int *table_size
 
 	return 0;
 }
-
-/*****************************************************************************/
 
 static int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int block)
 {
@@ -233,6 +233,11 @@ static int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int bl
 	return retv;
 }
 
+static void NpegClose()
+{
+	free(np_table);
+}
+
 /*****************************************************************************/
 
 int main(int argc, char *argv[])
@@ -245,7 +250,6 @@ int main(int argc, char *argv[])
 	char iso_name[64];
 	uint64_t magic;
 	u32 offset, size;
-	u8 table[0x400000];
 	u8 data_buf[0x100000];
 	u8 decrypt_buf[0x200000];
 	u8 header[0x100];
@@ -271,7 +275,7 @@ int main(int argc, char *argv[])
 		return EILSEQ;
 	}
 
-	retv = NpegOpen(in, hdr.psar_offset, header, table, &table_size);
+	retv = NpegOpen(in, hdr.psar_offset, header, &table_size);
 	if(retv < 0) {
 		printf("NpegOpen Error! %08x\n", retv);
 		return -1;
@@ -397,6 +401,7 @@ int main(int argc, char *argv[])
 
 	fclose(in);
 	fclose(out);
+	NpegClose();
 
 	return 0;
 }
