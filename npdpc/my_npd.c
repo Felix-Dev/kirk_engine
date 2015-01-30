@@ -1,4 +1,4 @@
-
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -19,8 +19,6 @@ u8 header[0x100];
 /*****************************************************************************/
 
 u8 header_key[16];
-FILE *iso_fd;
-int offset_psar;
 u8 *np_table;
 int total_blocks;
 int block_size;
@@ -28,11 +26,27 @@ u8 version_key[16];
 
 /*****************************************************************************/
 
-int NpegOpen(char *name, u8 *header, u8 *table, int *table_size)
+#define PBP_MAGIC 0x50425000
+
+struct pbpHdr {
+	u32 magic;
+	u32 ver;
+	u32 param_offset;
+	u32 icon0_offset;
+	u32 icon1_offset;
+	u32 pic0_offset;
+	u32 pic1_offset;
+	u32 snd0_offset;
+	u32 psp_offset;
+	u32 psar_offset;
+};
+
+/*****************************************************************************/
+
+int NpegOpen(FILE *fp, u32 offset, u8 *header, u8 *table, int *table_size)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
-	u8 pbp_buf[0x28];
 	u8 *np_header;
 	int start, end, lba_size, offset_table;
 	u32 *tp;
@@ -41,25 +55,15 @@ int NpegOpen(char *name, u8 *header, u8 *table, int *table_size)
 	np_header  = header;
 	np_table   = table;
 
-	iso_fd = fopen(name, "rb");
-	if(iso_fd==NULL)
-		return -2;
+	if(fp == NULL || header == NULL || table == NULL || table_size == NULL) {
+		errno = EFAULT;
+		return -1;
+	}
 
-	// read PBP header
-	retv = fread(pbp_buf, 0x28, 1, iso_fd);
-	if(retv!=1)
-		return -3;
-
-	// check "PBP"
-	if(*(u32*)pbp_buf!=0x50425000)
-		return -4;
-
-	offset_psar = *(u32*)(pbp_buf+0x24);
-	fseek(iso_fd, offset_psar, SEEK_SET);
-
-	retv = fread(np_header, 0x0100, 1, iso_fd);
-	if(retv!=1)
-		return -6;
+	if (fseek(fp, offset, SEEK_SET))
+		return -1;
+	if (fread(np_header, 0x0100, 1, fp) <= 0)
+		return -1;
 
 	// check "NPUMDIMG"
 	if(strncmp((char*)np_header, "NPUMDIMG", 8)){
@@ -96,10 +100,10 @@ int NpegOpen(char *name, u8 *header, u8 *table, int *table_size)
 	total_blocks = (lba_size+block_size-1)/block_size; // total blocks;
 
 	offset_table = *(u32*)(np_header+0x6c); // table offset
-	fseek(iso_fd, offset_psar+offset_table, SEEK_SET);
+	fseek(fp, offset + offset_table, SEEK_SET);
 
 	*table_size = total_blocks*32;
-	retv = fread(np_table, *table_size, 1, iso_fd);
+	retv = fread(np_table, *table_size, 1, fp);
 	if(retv!=1)
 		return -18;
 
@@ -155,7 +159,7 @@ int NpegOpen(char *name, u8 *header, u8 *table, int *table_size)
 
 /*****************************************************************************/
 
-int NpegReadBlock(u8 *data_buf, u8 *out_buf, int block)
+int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int block)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
@@ -170,15 +174,14 @@ int NpegReadBlock(u8 *data_buf, u8 *out_buf, int block)
 			return -1;
 	}
 
-	retv = fseek(iso_fd, offset_psar+tp[4], SEEK_SET);
-	if(retv<0){
+	if (fseek(fp, offset + tp[4], SEEK_SET)) {
 		if(block==(total_blocks-1))
 			return 0x00008000;
 		else
 			return -1;
 	}
 
-	retv = fread(data_buf, tp[5], 1, iso_fd);
+	retv = fread(data_buf, tp[5], 1, fp);
 	if(retv!=1){
 		if(block==(total_blocks-1))
 			return 0x00008000;
@@ -252,34 +255,40 @@ int NpegReadBlock(u8 *data_buf, u8 *out_buf, int block)
 
 /*****************************************************************************/
 
-int NpegClose(void)
-{
-	fclose(iso_fd);
-	iso_fd = NULL;
-	return 0;
-}
-
-/*****************************************************************************/
-
 int main(int argc, char *argv[])
 {
+	struct pbpHdr hdr;
 	int table_size, retv;
 	int blocks, block_size;
 	int start, end, iso_size;
 	int i;
 	char iso_name[64];
-	FILE *iso_fd;
+	FILE *in, *out;
 
 	printf("NP Decryptor for PC. Writen by tpu.\n");
 	kirk_init();
 
-	retv = NpegOpen("NP.PBP", header, table, &table_size);
-	if(retv<0){
-		retv = NpegOpen("EBOOT.PBP", header, table, &table_size);
-		if(retv<0){
-			printf("NpegOpen Error! %08x\n", retv);
-			return -1;
-		}
+	// Open and check PBP file
+	in = fopen("NP.PBP", "rb");
+	if(in == NULL) {
+		perror("NP.PBP");
+		return errno;
+	}
+
+	if (fread(&hdr, sizeof(hdr), 1, in) <= 0) {
+		perror("NP.PBP");
+		return errno;
+	}
+
+	if(hdr.magic != PBP_MAGIC) {
+		printf("Not a valid PBP file!\n");
+		return EILSEQ;
+	}
+
+	retv = NpegOpen(in, hdr.psar_offset, header, table, &table_size);
+	if(retv < 0) {
+		printf("NpegOpen Error! %08x\n", retv);
+		return -1;
 	}
 
 	write_file("header.bin", header, 0x100);
@@ -297,20 +306,21 @@ int main(int argc, char *argv[])
 	printf("ISO size: %d MB\n", iso_size/0x100000);
 
 	sprintf(iso_name, "%s.iso", header+0x70);
-	iso_fd = fopen(iso_name, "wb");
-	if(iso_fd==NULL){
-		printf("Error creating %s\n", iso_name);
+	out = fopen(iso_name, "wb");
+	if(out == NULL){
+		perror(iso_name);
+		return errno;
 	}
 
 	blocks = table_size/32;
 
 	for(i=0; i<blocks; i++){
-		retv = NpegReadBlock(data_buf, decrypt_buf, i);
+		retv = NpegReadBlock(in, hdr.psar_offset, data_buf, decrypt_buf, i);
 		if(retv<=0){
 			printf("Error %08x reading block %d\n", retv, i);
 			break;
 		}
-		fwrite(decrypt_buf, retv, 1, iso_fd);
+		fwrite(decrypt_buf, retv, 1, out);
 
 		if((i&0x0f)==0){
 			printf("Dumping... %3d%% %d/%d    \r", i*100/blocks, i, blocks);
@@ -318,8 +328,8 @@ int main(int argc, char *argv[])
 	}
 	printf("\n\n");
 
-	fclose(iso_fd);
-	NpegClose();
+	fclose(in);
+	fclose(out);
 
 	return 0;
 }

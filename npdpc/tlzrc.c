@@ -363,14 +363,11 @@ static void re_normalize(LZRC_DECODE *re)
 static void re_bit(LZRC_DECODE *re, u8 *prob, int bit)
 {
 	u32 bound;
-	u32 old_r, old_c;
-	u8 old_p;
+	u32 old_c;
 
 	re_normalize(re);
 
-	old_r = re->range;
 	old_c = re->code;
-	old_p = *prob;
 
 	bound = (re->range>>8)*(*prob);
 	*prob -= *prob>>3;
@@ -510,12 +507,11 @@ static void remove_node(LZRC_DECODE *re, int p)
 
 static int insert_node(LZRC_DECODE *re, int pos, int *match_len, int *match_dist, int do_cmp)
 {
-	u8 *src, *win;
+	u8 *src;
 	int i, t, p;
 	int content_size;
 
 	src = text_buf+pos;
-	win = text_buf+t_start;
 	content_size = (t_fill<pos)? (65280+t_fill-pos) : (t_fill-pos);
 	t_len = 1;
 	t_pos = 0;
@@ -653,36 +649,6 @@ static void update_tree(LZRC_DECODE *re, int length)
 			t_end -= 65280;
 	}
 
-}
-
-static void re_find_match(LZRC_DECODE *re, int *match_len, int *match_dist)
-{
-	int cp, win_p, i, j;
-	u8 *pbuf, *cbuf;
-
-	cp = re->in_ptr;
-
-	if(cp==re->in_len){
-		*match_len = 256;
-		return;
-	}else{
-		*match_len = 1;
-	}
-
-	win_p = (cp<16384)? cp : 16384;
-
-	for(i=1; i<=win_p; i++){
-		j = 0;
-		cbuf = re->input+cp;
-		pbuf = cbuf-i;
-		while( (j<255) && (cp+j<re->in_len) && (pbuf[j]==cbuf[j]))
-			j += 1;
-
-		if(j>=2 && *match_len<j){
-			*match_len = j;
-			*match_dist = i;
-		}
-	}
 }
 
 
