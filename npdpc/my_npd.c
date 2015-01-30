@@ -11,20 +11,10 @@
 #include "pgd.c"
 #include "tlzrc.c"
 
-/*****************************************************************************/
-
-static u8 header_key[16];
-static u8 *np_table;
-static int total_blocks;
-static int block_size;
-static u8 version_key[16];
-
-/*****************************************************************************/
-
 #define PBP_MAGIC 0x50425000
 #define STARTDAT_MAGIC 0x5441445452415453
 
-struct pbpHdr {
+typedef struct pbpHdr {
 	u32 magic;
 	u32 ver;
 	u32 param_offset;
@@ -35,9 +25,9 @@ struct pbpHdr {
 	u32 snd0_offset;
 	u32 psp_offset;
 	u32 psar_offset;
-};
+} pbpHdr;
 
-typedef struct sdHdr {
+typedef struct {
 	u8 unk0[12];
 	uint64_t magic;
 	u32 unk1;
@@ -47,77 +37,87 @@ typedef struct sdHdr {
 	u8 unk3[56];
 } sdHdr;
 
-/*****************************************************************************/
+typedef struct {
+	u8 hdrKey[16];
+	u8 verKey[16];
+	u8 hdr[208];
+	u8 *tbl;
+	size_t tblSize;
+	int blkNum;
+	size_t blkSize;
+	u32 lbaStart;
+	u32 lbaEnd;
+	size_t lbaSize;
+} np_t;
 
-static int NpegOpen(FILE *fp, u32 offset, u8 *header, int *table_size)
+static int NpegOpen(np_t *np, FILE *fp, u32 offset)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
-	u8 *np_header;
-	int start, end, lba_size, offset_table;
+	int offset_table;
 	u32 *tp;
 	int retv, i;
 
-	np_header  = header;
-
-	if(fp == NULL || header == NULL || table_size == NULL) {
+	if(fp == NULL || np == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
 
 	if (fseek(fp, offset, SEEK_SET))
 		return -1;
-	if (fread(np_header, 0x0100, 1, fp) <= 0)
+	if (fread(np->hdr, sizeof(np->hdr), 1, fp) <= 0)
 		return -1;
 
 	// check "NPUMDIMG"
-	if(strncmp((char*)np_header, "NPUMDIMG", 8)){
+	if(strncmp((char*)np->hdr, "NPUMDIMG", 8)){
 		printf("DATA.PSAR isn't a NPUMDIMG!\n");
 		return -7;
 	}
 
 	// bbmac_getkey
 	sceDrmBBMacInit(&mkey, 3);
-	sceDrmBBMacUpdate(&mkey, np_header, 0xc0);
-	bbmac_getkey(&mkey, np_header+0xc0, version_key);
+	sceDrmBBMacUpdate(&mkey, np->hdr, 0xc0);
+	bbmac_getkey(&mkey, np->hdr + 0xc0, np->verKey);
 
-	// header MAC check
+	// np->hdr MAC check
 	sceDrmBBMacInit(&mkey, 3);
-	sceDrmBBMacUpdate(&mkey, np_header, 0xc0);
-	retv = sceDrmBBMacFinal2(&mkey, np_header+0xc0, version_key);
+	sceDrmBBMacUpdate(&mkey, np->hdr, 0xc0);
+	retv = sceDrmBBMacFinal2(&mkey, np->hdr+0xc0, np->verKey);
 	if(retv){
-		printf("NP header MAC check failed!\n");
+		printf("NP np->hdr MAC check failed!\n");
 		return -13;
 	}
 
-	// decrypt NP header
-	memcpy(header_key, np_header+0xa0, 0x10);
-	sceDrmBBCipherInit(&ckey, 1, 2, header_key, version_key, 0);
-	sceDrmBBCipherUpdate(&ckey, np_header+0x40, 0x60);
+	// decrypt NP np->hdr
+	memcpy(np->hdrKey, np->hdr+0xa0, 0x10);
+	sceDrmBBCipherInit(&ckey, 1, 2, np->hdrKey, np->verKey, 0);
+	sceDrmBBCipherUpdate(&ckey, np->hdr+0x40, 0x60);
 	sceDrmBBCipherFinal(&ckey);
 
 	printf("NPUMDIMG Version Key: 0x");
 	for (i = 0; i < 16; i++)
-		printf("%02X", version_key[i]);
-	printf("\nNPUMDIMG Header Key:  0x");
+		printf("%02X", np->verKey[i]);
+	printf("\nNPUMDIMG np->hdr Key:  0x");
 	for (i = 0; i < 16; i++)
-		printf("%02X", header_key[i]);
+		printf("%02X", np->hdrKey[i]);
 	putchar('\n');
 
-	start = *(u32*)(np_header+0x54); // LBA start
-	end   = *(u32*)(np_header+0x64); // LBA end
-	block_size = *(u32*)(np_header+0x0c); // block_size
-	lba_size = (end-start+1); // LBA size of ISO
-	total_blocks = (lba_size+block_size-1)/block_size; // total blocks;
+	np->lbaStart = *(u32 *)(np->hdr + 0x54);
+	np->lbaEnd = *(u32 *)(np->hdr + 0x64);
+	np->lbaSize = np->lbaEnd - np->lbaStart + 1;
 
-	offset_table = *(u32*)(np_header+0x6c); // table offset
+	np->blkNum = np->tblSize / 32;
+	np->blkSize = *(u32 *)(np->hdr + 0x0c);
+	np->blkNum = (np->lbaSize + np->blkSize - 1) / np->blkSize;
+
+	offset_table = *(u32*)(np->hdr+0x6c); // table offset
 	fseek(fp, offset + offset_table, SEEK_SET);
 
-	*table_size = total_blocks*32;
-	np_table = malloc(*table_size);
-	if (np_table == NULL)
+	np->tblSize = np->blkNum*32;
+	np->tbl = malloc(np->tblSize);
+	if (np->tbl == NULL)
 		return -1;
-	retv = fread(np_table, *table_size, 1, fp);
+	retv = fread(np->tbl, np->tblSize, 1, fp);
 	if(retv!=1)
 		return -18;
 
@@ -126,18 +126,18 @@ static int NpegOpen(FILE *fp, u32 offset, u8 *header, int *table_size)
 	u8 bbmac[16];
 
 	sceDrmBBMacInit(&mkey, 3);
-	for(i=0; i<*table_size; i+=0x8000){
-		if(i+0x8000>*table_size)
-			msize = *table_size-i;
+	for(i=0; i<np->tblSize; i+=0x8000){
+		if(i+0x8000>np->tblSize)
+			msize = np->tblSize-i;
 		else
 			msize = 0x8000;
-		sceDrmBBMacUpdate(&mkey, np_table+i, msize);
+		sceDrmBBMacUpdate(&mkey, np->tbl+i, msize);
 	}
-	sceDrmBBMacFinal(&mkey, bbmac, version_key);
+	sceDrmBBMacFinal(&mkey, bbmac, np->verKey);
 	bbmac_build_final2(3, bbmac);
 
-	tp = (u32*)np_table;
-	for(i=0; i<total_blocks; i++){
+	tp = (u32*)np->tbl;
+	for(i=0; i<np->blkNum; i++){
 		u32 a0, a1, a2, a3, v0, v1, t0, t1, t2;
 
 		v1 = tp[0];
@@ -171,23 +171,23 @@ static int NpegOpen(FILE *fp, u32 offset, u8 *header, int *table_size)
 	return 0;
 }
 
-static int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int block)
+static int NpegReadBlock(np_t *np, FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int block)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
 	int retv;
 	u32 *tp;
 
-	tp = (u32*)(np_table+block*32);
+	tp = (u32*)(np->tbl+block*32);
 	if(tp[7]!=0){
-		if(block==(total_blocks-1))
+		if(block==(np->blkNum-1))
 			return 0x00008000;
 		else
 			return -1;
 	}
 
 	if (fseek(fp, offset + tp[4], SEEK_SET)) {
-		if(block==(total_blocks-1))
+		if(block==(np->blkNum-1))
 			return 0x00008000;
 		else
 			return -1;
@@ -195,7 +195,7 @@ static int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int bl
 
 	retv = fread(data_buf, tp[5], 1, fp);
 	if(retv!=1){
-		if(block==(total_blocks-1))
+		if(block==(np->blkNum-1))
 			return 0x00008000;
 		else
 			return -2;
@@ -204,9 +204,9 @@ static int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int bl
 	if((tp[6]&1)==0){
 		sceDrmBBMacInit(&mkey, 3);
 		sceDrmBBMacUpdate(&mkey, data_buf, tp[5]);
-		retv = sceDrmBBMacFinal2(&mkey, (u8*)tp, version_key);
+		retv = sceDrmBBMacFinal2(&mkey, (u8*)tp, np->verKey);
 		if(retv<0){
-			if(block==(total_blocks-1))
+			if(block==(np->blkNum-1))
 				return 0x00008000;
 			else
 				return -5;
@@ -214,14 +214,14 @@ static int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int bl
 	}
 
 	if((tp[6]&4)==0){
-		sceDrmBBCipherInit(&ckey, 1, 2, header_key, version_key, tp[4]>>4);
+		sceDrmBBCipherInit(&ckey, 1, 2, np->hdrKey, np->verKey, tp[4]>>4);
 		sceDrmBBCipherUpdate(&ckey, data_buf, tp[5]);
 		sceDrmBBCipherFinal(&ckey);
 	}
 
-	if(tp[5]<block_size*2048){
+	if(tp[5]<np->blkSize*2048){
 		retv = lzrc_decompress(out_buf, 0x00100000, data_buf, tp[5]);
-		if(retv!=block_size*2048){
+		if(retv!=np->blkSize*2048){
 			printf("LZR decompress error! retv=%d\n", retv);
 		}
 
@@ -233,25 +233,22 @@ static int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int bl
 	return retv;
 }
 
-static void NpegClose()
+static void NpegClose(const np_t *np)
 {
-	free(np_table);
+	free(np->tbl);
 }
 
 /*****************************************************************************/
 
 int main(int argc, char *argv[])
 {
-	struct pbpHdr hdr;
-	int table_size, retv;
-	int blocks, block_size;
-	int start, end, iso_size;
-	int i;
+	pbpHdr hdr;
+	np_t np;
+	int retv, i;
 	char iso_name[64];
 	uint64_t magic;
 	u32 offset, size;
 	void *data, *dec;
-	u8 header[0x100];
 	FILE *in, *out;
 
 	printf("NP Decryptor for PC. Writen by tpu.\n");
@@ -274,7 +271,7 @@ int main(int argc, char *argv[])
 		return EILSEQ;
 	}
 
-	retv = NpegOpen(in, hdr.psar_offset, header, &table_size);
+	retv = NpegOpen(&np, in, hdr.psar_offset);
 	if(retv < 0) {
 		printf("NpegOpen Error! %08x\n", retv);
 		return -1;
@@ -352,7 +349,7 @@ int main(int argc, char *argv[])
 			perror("NP.PBP");
 			return errno;
 		}
-		size = pgd_decrypt(data, size, 2, version_key);
+		size = pgd_decrypt(data, size, 2, np.verKey);
 		if (pgd_decrypt < 0) {
 			printf("NP.PBP: PGD decryption failed.\n");
 			return -1;
@@ -373,33 +370,25 @@ int main(int argc, char *argv[])
 		free(data);
 	}
 
-	start = *(u32*)(header+0x54); // 0x54 LBA start
-	end   = *(u32*)(header+0x64); // 0x64 LBA end
-	iso_size = (end-start+1)*2048;
-
-	block_size = *(u32*)(header+0x0c); // 0x0C block size?
-	block_size *= 2048;
-	data = malloc(block_size);
-	dec = malloc(block_size);
+	data = malloc(np.blkSize * 2048);
+	dec = malloc(np.blkSize * 2048);
 	if (dec == NULL) {
 		perror(NULL);
 		return errno;
 	}
 
-	printf("ISO name: %s.iso\n", header+0x70);
-	printf("ISO size: %d MB\n", iso_size/0x100000);
+	printf("ISO name: %s.iso\n", np.hdr+0x70);
+	printf("ISO size: %zd MB\n", np.lbaSize * 2048 / 0x100000);
 
-	sprintf(iso_name, "%s.iso", header+0x70);
+	sprintf(iso_name, "%s.iso", np.hdr+0x70);
 	out = fopen(iso_name, "wb");
 	if(out == NULL){
 		perror(iso_name);
 		return errno;
 	}
 
-	blocks = table_size/32;
-
-	for(i=0; i<blocks; i++){
-		retv = NpegReadBlock(in, hdr.psar_offset, data, dec, i);
+	for(i = 0; i < np.blkNum; i++){
+		retv = NpegReadBlock(&np, in, hdr.psar_offset, data, dec, i);
 		if(retv<=0){
 			printf("Error %08x reading block %d\n", retv, i);
 			break;
@@ -407,7 +396,7 @@ int main(int argc, char *argv[])
 		fwrite(dec, retv, 1, out);
 
 		if((i&0x0f)==0){
-			printf("Dumping... %3d%% %d/%d    \r", i*100/blocks, i, blocks);
+			printf("Dumping... %3d%% %d/%d    \r", i * 100 / np.blkNum, i, np.blkNum);
 		}
 	}
 	printf("\n\n");
@@ -415,7 +404,7 @@ int main(int argc, char *argv[])
 	fclose(in);
 	fclose(out);
 	free(dec);
-	NpegClose();
+	NpegClose(&np);
 
 	return 0;
 }
