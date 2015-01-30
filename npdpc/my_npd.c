@@ -7,16 +7,14 @@
 #include "kirk_engine.h"
 #include "amctrl.h"
 
+#include "tlzrc.c"
+
 /*****************************************************************************/
 
 u8 table[0x400000];
 u8 data_buf[0x100000];
 u8 decrypt_buf[0x200000];
 u8 header[0x100];
-
-/*****************************************************************************/
-
-int lzrc_decompress(void *out, int out_len, void *in, int in_len);
 
 /*****************************************************************************/
 
@@ -215,11 +213,7 @@ int NpegReadBlock(u8 *data_buf, u8 *out_buf, int block)
 		retv = 0x00008000;
 #endif
 
-#if 0
-		retv = cccLZRDecompress(out_buf, 0x00100000, data_buf, 0);
-#else
 		retv = lzrc_decompress(out_buf, 0x00100000, data_buf, tp[5]);
-#endif
 		if(retv!=block_size*2048){
 			printf("LZR decompress error! retv=%d\n", retv);
 		}
