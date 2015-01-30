@@ -1,4 +1,5 @@
 #include <errno.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -255,6 +256,15 @@ int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int block)
 
 /*****************************************************************************/
 
+struct sdHdr {
+	uint64_t magic;
+	u32 unk1;
+	u32 unk2;
+	u32 hdrSize;
+	u32 dataSize;
+	u8 unk[56];
+};
+
 int main(int argc, char *argv[])
 {
 	struct pbpHdr hdr;
@@ -263,6 +273,7 @@ int main(int argc, char *argv[])
 	int start, end, iso_size;
 	int i;
 	char iso_name[64];
+	u32 size;
 	FILE *in, *out;
 
 	printf("NP Decryptor for PC. Writen by tpu.\n");
@@ -283,6 +294,40 @@ int main(int argc, char *argv[])
 	if(hdr.magic != PBP_MAGIC) {
 		printf("Not a valid PBP file!\n");
 		return EILSEQ;
+	}
+
+	if (fseek(in, hdr.psp_offset + 1440 + offsetof(struct sdHdr, dataSize), SEEK_SET)) {
+		perror("NP.PBP");
+		return errno;
+	}
+	if (size > sizeof(data_buf)) {
+		printf("NP.PBP: STARTDAT is too large.\n");
+		return EFBIG;
+	}
+	if (fread(&size, sizeof(size), 1, in) <= 0) {
+		perror("NP.PBP");
+		return errno;
+	}
+	if (fseek(in, hdr.psp_offset + 1440 + 80, SEEK_SET)) {
+		perror("NP.PBP");
+		return errno;
+	}
+	if (fread(data_buf, size, 1, in) <= 0) {
+		perror("NP.PBP");
+		return errno;
+	}
+	out = fopen("STARTDAT.PNG", "wb");
+	if (out == NULL) {
+		perror("STARTDAT.PNG");
+		return errno;
+	}
+	if (fwrite(data_buf, size, 1, out) != 1) {
+		perror("STARTDAT.PNG");
+		return errno;
+	}
+	if (fclose(out)) {
+		perror("STARTDAT.PNG");
+		return errno;
 	}
 
 	retv = NpegOpen(in, hdr.psar_offset, header, table, &table_size);
