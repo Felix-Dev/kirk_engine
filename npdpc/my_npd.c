@@ -250,8 +250,8 @@ int main(int argc, char *argv[])
 	char iso_name[64];
 	uint64_t magic;
 	u32 offset, size;
+	u8 *dec;
 	u8 data_buf[0x100000];
-	u8 decrypt_buf[0x200000];
 	u8 header[0x100];
 	FILE *in, *out;
 
@@ -372,6 +372,11 @@ int main(int argc, char *argv[])
 
 	block_size = *(u32*)(header+0x0c); // 0x0C block size?
 	block_size *= 2048;
+	dec = malloc(block_size);
+	if (dec == NULL) {
+		perror(NULL);
+		return errno;
+	}
 
 	printf("ISO name: %s.iso\n", header+0x70);
 	printf("ISO size: %d MB\n", iso_size/0x100000);
@@ -386,12 +391,12 @@ int main(int argc, char *argv[])
 	blocks = table_size/32;
 
 	for(i=0; i<blocks; i++){
-		retv = NpegReadBlock(in, hdr.psar_offset, data_buf, decrypt_buf, i);
+		retv = NpegReadBlock(in, hdr.psar_offset, data_buf, dec, i);
 		if(retv<=0){
 			printf("Error %08x reading block %d\n", retv, i);
 			break;
 		}
-		fwrite(decrypt_buf, retv, 1, out);
+		fwrite(dec, retv, 1, out);
 
 		if((i&0x0f)==0){
 			printf("Dumping... %3d%% %d/%d    \r", i*100/blocks, i, blocks);
@@ -401,6 +406,7 @@ int main(int argc, char *argv[])
 
 	fclose(in);
 	fclose(out);
+	free(dec);
 	NpegClose();
 
 	return 0;
