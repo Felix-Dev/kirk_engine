@@ -86,13 +86,19 @@ int NpegOpen(FILE *fp, u32 offset, u8 *header, u8 *table, int *table_size)
 		return -13;
 	}
 
-	write_file("version_key.bin", version_key, 16);
-
 	// decrypt NP header
 	memcpy(header_key, np_header+0xa0, 0x10);
 	sceDrmBBCipherInit(&ckey, 1, 2, header_key, version_key, 0);
 	sceDrmBBCipherUpdate(&ckey, np_header+0x40, 0x60);
 	sceDrmBBCipherFinal(&ckey);
+
+	printf("NPUMDIMG Version Key: 0x");
+	for (i = 0; i < 16; i++)
+		printf("%02X", version_key[i]);
+	printf("\nNPUMDIMG Header Key:  0x");
+	for (i = 0; i < 16; i++)
+		printf("%02X", header_key[i]);
+	putchar('\n');
 
 	start = *(u32*)(np_header+0x54); // LBA start
 	end   = *(u32*)(np_header+0x64); // LBA end
