@@ -13,18 +13,18 @@
 
 /*****************************************************************************/
 
-u8 table[0x400000];
-u8 data_buf[0x100000];
-u8 decrypt_buf[0x200000];
-u8 header[0x100];
+static u8 table[0x400000];
+static u8 data_buf[0x100000];
+static u8 decrypt_buf[0x200000];
+static u8 header[0x100];
 
 /*****************************************************************************/
 
-u8 header_key[16];
-u8 *np_table;
-int total_blocks;
-int block_size;
-u8 version_key[16];
+static u8 header_key[16];
+static u8 *np_table;
+static int total_blocks;
+static int block_size;
+static u8 version_key[16];
 
 /*****************************************************************************/
 
@@ -56,7 +56,7 @@ typedef struct sdHdr {
 
 /*****************************************************************************/
 
-int NpegOpen(FILE *fp, u32 offset, u8 *header, u8 *table, int *table_size)
+static int NpegOpen(FILE *fp, u32 offset, u8 *header, u8 *table, int *table_size)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
@@ -178,7 +178,7 @@ int NpegOpen(FILE *fp, u32 offset, u8 *header, u8 *table, int *table_size)
 
 /*****************************************************************************/
 
-int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int block)
+static int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int block)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
