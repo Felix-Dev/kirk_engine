@@ -58,7 +58,6 @@ static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
 	char hdr[208];
 	uint32_t *tp;
 	uint8_t bbmac[16];
-	uint32_t a0, a1, a2, a3, v0, v1, t0, t1, t2;
 	int msize;
 
 	if(fp == NULL || np == NULL) {
@@ -132,32 +131,12 @@ static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
 	sceDrmBBMacFinal(&mkey, bbmac, np->verKey);
 	bbmac_build_final2(3, bbmac);
 
-	tp = (uint32_t*)np->tbl;
-	for(i=0; i<np->blkNum; i++){
-		v1 = tp[0];
-		v0 = tp[1];
-		a0 = tp[2];
-		t1 = tp[3];
-
-		a1 = tp[4];
-		a2 = tp[5];
-		a3 = tp[6];
-		t0 = tp[7];
-
-		t2 = v1^v0;
-		v0 = v0^a0;
-		v1 = v1^t1;
-		a0 = a0^t1;
-
-		a1 = a1^a0;
-		a2 = a2^v0;
-		a3 = a3^v1;
-		t0 = t0^t2;
-
-		tp[4] = a1;
-		tp[5] = a2;
-		tp[6] = a3;
-		tp[7] = t0;
+	tp = (uint32_t *)np->tbl;
+	for (i = 0; i < np->blkNum; i++) {
+		tp[4] ^= tp[2] ^ tp[3];
+		tp[5] ^= tp[1] ^ tp[2];
+		tp[6] ^= tp[0] ^ tp[3];
+		tp[7] ^= tp[0] ^ tp[1];
 
 		tp += 8;
 	}
