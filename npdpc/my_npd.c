@@ -8,6 +8,7 @@
 #include "kirk_engine.h"
 #include "amctrl.h"
 
+#include "pgd.c"
 #include "tlzrc.c"
 
 /*****************************************************************************/
@@ -282,7 +283,7 @@ int main(int argc, char *argv[])
 	int i;
 	char iso_name[64];
 	uint64_t magic;
-	u32 size;
+	u32 offset, size;
 	FILE *in, *out;
 
 	printf("NP Decryptor for PC. Writen by tpu.\n");
@@ -303,6 +304,12 @@ int main(int argc, char *argv[])
 	if(hdr.magic != PBP_MAGIC) {
 		printf("Not a valid PBP file!\n");
 		return EILSEQ;
+	}
+
+	retv = NpegOpen(in, hdr.psar_offset, header, table, &table_size);
+	if(retv < 0) {
+		printf("NpegOpen Error! %08x\n", retv);
+		return -1;
 	}
 
 	if (fseek(in, hdr.psp_offset + 1428 + offsetof(sdHdr, magic), SEEK_SET)) {
@@ -349,10 +356,45 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	retv = NpegOpen(in, hdr.psar_offset, header, table, &table_size);
-	if(retv < 0) {
-		printf("NpegOpen Error! %08x\n", retv);
-		return -1;
+	if (fseek(in, hdr.psp_offset + 48, SEEK_SET)) {
+		perror("NP.PBP");
+		return errno;
+	}
+	if (fread(&offset, sizeof(offset), 1, in) <= 0) {
+		perror("NP.PBP");
+		return errno;
+	}
+	if (offset) {
+		if (fread(&size, sizeof(size), 1, in) <= 0) {
+			perror("NP.PBP");
+			return errno;
+		}
+		if (fseek(in, offset, SEEK_SET)) {
+			perror("NP.PBP");
+			return errno;
+		}
+		if (fread(data_buf, size, 1, in) <= 0) {
+			perror("NP.PBP");
+			return errno;
+		}
+		size = pgd_decrypt(data_buf, size, 2, version_key);
+		if (pgd_decrypt < 0) {
+			printf("NP.PBP: PGD decryption failed.\n");
+			return -1;
+		}
+		out = fopen("OPNSSMP.BIN", "wb");
+		if (out == NULL) {
+			perror("OPNSSMP.BIN");
+			return errno;
+		}
+		if (fwrite(data_buf, size, 1, out) <= 0) {
+			perror("OPNSSMP.BIN");
+			return errno;
+		}
+		if (fclose(out)) {
+			perror("OPNSSMP.BIN");
+			return errno;
+		}
 	}
 
 	start = *(u32*)(header+0x54); // 0x54 LBA start
