@@ -15,48 +15,48 @@
 #define STARTDAT_MAGIC 0x5441445452415453
 
 typedef struct pbpHdr {
-	u32 magic;
-	u32 ver;
-	u32 param_offset;
-	u32 icon0_offset;
-	u32 icon1_offset;
-	u32 pic0_offset;
-	u32 pic1_offset;
-	u32 snd0_offset;
-	u32 psp_offset;
-	u32 psar_offset;
+	uint32_t magic;
+	uint32_t ver;
+	uint32_t param_offset;
+	uint32_t icon0_offset;
+	uint32_t icon1_offset;
+	uint32_t pic0_offset;
+	uint32_t pic1_offset;
+	uint32_t snd0_offset;
+	uint32_t psp_offset;
+	uint32_t psar_offset;
 } pbpHdr;
 
 typedef struct {
-	u8 unk0[12];
+	uint8_t unk0[12];
 	uint64_t magic;
-	u32 unk1;
-	u32 unk2;
-	u32 hdrSize;
-	u32 dataSize;
-	u8 unk3[56];
+	uint32_t unk1;
+	uint32_t unk2;
+	uint32_t hdrSize;
+	uint32_t dataSize;
+	uint8_t unk3[56];
 } sdHdr;
 
 typedef struct {
-	u8 hdrKey[16];
-	u8 verKey[16];
-	u8 *tbl;
+	uint8_t hdrKey[16];
+	uint8_t verKey[16];
+	uint8_t *tbl;
 	size_t tblSize;
 	int blkNum;
 	size_t blkSize;
-	u32 lbaStart;
-	u32 lbaEnd;
+	uint32_t lbaStart;
+	uint32_t lbaEnd;
 	size_t lbaSize;
 } np_t;
 
-static int NpegOpen(np_t *np, FILE *fp, u32 offset)
+static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
 	int offset_table;
 	int retv, i;
-	u8 hdr[208];
-	u32 *tp;
+	char hdr[208];
+	uint32_t *tp;
 
 	if(fp == NULL || np == NULL) {
 		errno = EFAULT;
@@ -68,7 +68,7 @@ static int NpegOpen(np_t *np, FILE *fp, u32 offset)
 	if (fread(hdr, sizeof(hdr), 1, fp) <= 0)
 		return -1;
 
-	if(strncmp((char*)hdr, "NPUMDIMG", 8)){
+	if(strncmp(hdr, "NPUMDIMG", 8)){
 		printf("DATA.PSAR isn't a NPUMDIMG!\n");
 		return -7;
 	}
@@ -98,15 +98,15 @@ static int NpegOpen(np_t *np, FILE *fp, u32 offset)
 		printf("%02X", np->hdrKey[i]);
 	putchar('\n');
 
-	np->lbaStart = *(u32 *)(hdr + 0x54);
-	np->lbaEnd = *(u32 *)(hdr + 0x64);
+	np->lbaStart = *(uint32_t *)(hdr + 0x54);
+	np->lbaEnd = *(uint32_t *)(hdr + 0x64);
 	np->lbaSize = np->lbaEnd - np->lbaStart + 1;
 
 	np->blkNum = np->tblSize / 32;
-	np->blkSize = *(u32 *)(hdr + 0x0c);
+	np->blkSize = *(uint32_t *)(hdr + 0x0c);
 	np->blkNum = (np->lbaSize + np->blkSize - 1) / np->blkSize;
 
-	offset_table = *(u32*)(hdr + 0x6c); // table offset
+	offset_table = *(uint32_t*)(hdr + 0x6c); // table offset
 	fseek(fp, offset + offset_table, SEEK_SET);
 
 	np->tblSize = np->blkNum*32;
@@ -119,7 +119,7 @@ static int NpegOpen(np_t *np, FILE *fp, u32 offset)
 
 	// table mac test
 	int msize;
-	u8 bbmac[16];
+	uint8_t bbmac[16];
 
 	sceDrmBBMacInit(&mkey, 3);
 	for(i=0; i<np->tblSize; i+=0x8000){
@@ -132,9 +132,9 @@ static int NpegOpen(np_t *np, FILE *fp, u32 offset)
 	sceDrmBBMacFinal(&mkey, bbmac, np->verKey);
 	bbmac_build_final2(3, bbmac);
 
-	tp = (u32*)np->tbl;
+	tp = (uint32_t*)np->tbl;
 	for(i=0; i<np->blkNum; i++){
-		u32 a0, a1, a2, a3, v0, v1, t0, t1, t2;
+		uint32_t a0, a1, a2, a3, v0, v1, t0, t1, t2;
 
 		v1 = tp[0];
 		v0 = tp[1];
@@ -167,14 +167,14 @@ static int NpegOpen(np_t *np, FILE *fp, u32 offset)
 	return 0;
 }
 
-static int NpegReadBlock(np_t *np, FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int block)
+static int NpegReadBlock(np_t *np, FILE *fp, uint32_t offset, uint8_t *data_buf, uint8_t *out_buf, int block)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
 	int retv;
-	u32 *tp;
+	uint32_t *tp;
 
-	tp = (u32*)(np->tbl+block*32);
+	tp = (uint32_t*)(np->tbl+block*32);
 	if(tp[7]!=0){
 		if(block==(np->blkNum-1))
 			return 0x00008000;
@@ -200,7 +200,7 @@ static int NpegReadBlock(np_t *np, FILE *fp, u32 offset, u8 *data_buf, u8 *out_b
 	if((tp[6]&1)==0){
 		sceDrmBBMacInit(&mkey, 3);
 		sceDrmBBMacUpdate(&mkey, data_buf, tp[5]);
-		retv = sceDrmBBMacFinal2(&mkey, (u8*)tp, np->verKey);
+		retv = sceDrmBBMacFinal2(&mkey, (uint8_t*)tp, np->verKey);
 		if(retv<0){
 			if(block==(np->blkNum-1))
 				return 0x00008000;
@@ -243,7 +243,7 @@ int main(int argc, char *argv[])
 	int retv, i;
 	char iso_name[64];
 	uint64_t magic;
-	u32 offset, size;
+	uint32_t offset, size;
 	void *data, *dec;
 	FILE *in, *out;
 
