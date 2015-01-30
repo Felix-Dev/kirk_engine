@@ -109,7 +109,7 @@ static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
 	np->blkSize = *(uint32_t *)(hdr + 0x0c);
 	np->blkNum = (np->lbaSize + np->blkSize - 1) / np->blkSize;
 
-	offset_table = *(uint32_t*)(hdr + 0x6c); // table offset
+	offset_table = *(uint32_t*)(hdr + 0x6c);
 	fseek(fp, offset + offset_table, SEEK_SET);
 
 	np->tblSize = np->blkNum*32;
@@ -232,8 +232,6 @@ static void NpegClose(const np_t *np)
 	free(np->tbl);
 }
 
-/*****************************************************************************/
-
 int main(int argc, char *argv[])
 {
 	pbpHdr hdr;
@@ -248,7 +246,6 @@ int main(int argc, char *argv[])
 	printf("NP Decryptor for PC. Writen by tpu.\n");
 	kirk_init();
 
-	// Open and check PBP file
 	in = fopen("NP.PBP", "rb");
 	if(in == NULL) {
 		perror("NP.PBP");
