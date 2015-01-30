@@ -227,42 +227,10 @@ static int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int bl
 	}
 
 	if(tp[5]<block_size*2048){
-#if 0
-		char name[32];
-		//printf("block %4d: %08x\n", block, tp[5]);
-		sprintf(name, "cdata/%4d.bin", block);
-		write_file(name, data_buf, tp[5]);
-		retv = 0x00008000;
-#endif
-
 		retv = lzrc_decompress(out_buf, 0x00100000, data_buf, tp[5]);
 		if(retv!=block_size*2048){
 			printf("LZR decompress error! retv=%d\n", retv);
 		}
-#if 0
-// compress test
-{
-	u8 *dbuf, *ebuf;
-	int esize, dsize;
-	char name[32];
-
-	ebuf = malloc(1024*1024);
-	dbuf = malloc(1024*1024);
-	memset(ebuf, 0, 1024*1024);
-	memset(dbuf, 0, 1024*1024);
-
-	esize = lzrc_compress(ebuf, 1024*1024, out_buf, retv);
-	dsize = lzrc_decompress(dbuf, 1024*1024, ebuf, esize);
-	if(dsize!=retv || memcmp(out_buf, dbuf, dsize)){
-		printf("lzrc_compress failed on block %d!\n", block);
-		sprintf(name, "lzrc_%4d.bin", block);
-		write_file(name, data_buf, tp[5]);
-	}
-
-	free(ebuf);
-	free(dbuf);
-}
-#endif
 
 	}else{
 		memcpy(out_buf, data_buf, tp[5]);
