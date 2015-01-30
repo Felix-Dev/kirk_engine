@@ -256,14 +256,17 @@ int NpegReadBlock(FILE *fp, u32 offset, u8 *data_buf, u8 *out_buf, int block)
 
 /*****************************************************************************/
 
-struct sdHdr {
+#define STARTDAT_MAGIC 0x5441445452415453
+
+typedef struct sdHdr {
+	u8 unk0[12];
 	uint64_t magic;
 	u32 unk1;
 	u32 unk2;
 	u32 hdrSize;
 	u32 dataSize;
-	u8 unk[56];
-};
+	u8 unk3[56];
+} sdHdr;
 
 int main(int argc, char *argv[])
 {
@@ -273,6 +276,7 @@ int main(int argc, char *argv[])
 	int start, end, iso_size;
 	int i;
 	char iso_name[64];
+	uint64_t magic;
 	u32 size;
 	FILE *in, *out;
 
@@ -296,38 +300,48 @@ int main(int argc, char *argv[])
 		return EILSEQ;
 	}
 
-	if (fseek(in, hdr.psp_offset + 1440 + offsetof(struct sdHdr, dataSize), SEEK_SET)) {
+	if (fseek(in, hdr.psp_offset + 1428 + offsetof(sdHdr, magic), SEEK_SET)) {
 		perror("NP.PBP");
 		return errno;
 	}
-	if (size > sizeof(data_buf)) {
-		printf("NP.PBP: STARTDAT is too large.\n");
-		return EFBIG;
-	}
-	if (fread(&size, sizeof(size), 1, in) <= 0) {
+	if (fread(&magic, sizeof(magic), 1, in) <= 0) {
 		perror("NP.PBP");
 		return errno;
 	}
-	if (fseek(in, hdr.psp_offset + 1440 + 80, SEEK_SET)) {
-		perror("NP.PBP");
-		return errno;
-	}
-	if (fread(data_buf, size, 1, in) <= 0) {
-		perror("NP.PBP");
-		return errno;
-	}
-	out = fopen("STARTDAT.PNG", "wb");
-	if (out == NULL) {
-		perror("STARTDAT.PNG");
-		return errno;
-	}
-	if (fwrite(data_buf, size, 1, out) != 1) {
-		perror("STARTDAT.PNG");
-		return errno;
-	}
-	if (fclose(out)) {
-		perror("STARTDAT.PNG");
-		return errno;
+	if (magic == STARTDAT_MAGIC) {
+		if (fseek(in, hdr.psp_offset + 1428 + offsetof(sdHdr, dataSize), SEEK_SET)) {
+			perror("NP.PBP");
+			return errno;
+		}
+		if (size > sizeof(data_buf)) {
+			printf("NP.PBP: STARTDAT is too large.\n");
+			return EFBIG;
+		}
+		if (fread(&size, sizeof(size), 1, in) <= 0) {
+			perror("NP.PBP");
+			return errno;
+		}
+		if (fseek(in, hdr.psp_offset + 1428 + sizeof(sdHdr), SEEK_SET)) {
+			perror("NP.PBP");
+			return errno;
+		}
+		if (fread(data_buf, size, 1, in) <= 0) {
+			perror("NP.PBP");
+			return errno;
+		}
+		out = fopen("STARTDAT.PNG", "wb");
+		if (out == NULL) {
+			perror("STARTDAT.PNG");
+			return errno;
+		}
+		if (fwrite(data_buf, size, 1, out) != 1) {
+			perror("STARTDAT.PNG");
+			return errno;
+		}
+		if (fclose(out)) {
+			perror("STARTDAT.PNG");
+			return errno;
+		}
 	}
 
 	retv = NpegOpen(in, hdr.psar_offset, header, table, &table_size);
