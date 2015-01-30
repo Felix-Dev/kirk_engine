@@ -250,8 +250,7 @@ int main(int argc, char *argv[])
 	char iso_name[64];
 	uint64_t magic;
 	u32 offset, size;
-	u8 *dec;
-	u8 data_buf[0x100000];
+	void *data, *dec;
 	u8 header[0x100];
 	FILE *in, *out;
 
@@ -294,19 +293,20 @@ int main(int argc, char *argv[])
 			perror("NP.PBP");
 			return errno;
 		}
-		if (size > sizeof(data_buf)) {
-			printf("NP.PBP: STARTDAT is too large.\n");
-			return EFBIG;
-		}
 		if (fread(&size, sizeof(size), 1, in) <= 0) {
 			perror("NP.PBP");
+			return errno;
+		}
+		data = malloc(size);
+		if (data == NULL) {
+			perror(NULL);
 			return errno;
 		}
 		if (fseek(in, hdr.psp_offset + 1428 + sizeof(sdHdr), SEEK_SET)) {
 			perror("NP.PBP");
 			return errno;
 		}
-		if (fread(data_buf, size, 1, in) <= 0) {
+		if (fread(data, size, 1, in) <= 0) {
 			perror("NP.PBP");
 			return errno;
 		}
@@ -315,7 +315,7 @@ int main(int argc, char *argv[])
 			perror("STARTDAT.PNG");
 			return errno;
 		}
-		if (fwrite(data_buf, size, 1, out) != 1) {
+		if (fwrite(data, size, 1, out) != 1) {
 			perror("STARTDAT.PNG");
 			return errno;
 		}
@@ -323,6 +323,7 @@ int main(int argc, char *argv[])
 			perror("STARTDAT.PNG");
 			return errno;
 		}
+		free(data);
 	}
 
 	if (fseek(in, hdr.psp_offset + 48, SEEK_SET)) {
@@ -338,15 +339,20 @@ int main(int argc, char *argv[])
 			perror("NP.PBP");
 			return errno;
 		}
+		data = malloc(size);
+		if (data == NULL) {
+			perror(NULL);
+			return errno;
+		}
 		if (fseek(in, offset, SEEK_SET)) {
 			perror("NP.PBP");
 			return errno;
 		}
-		if (fread(data_buf, size, 1, in) <= 0) {
+		if (fread(data, size, 1, in) <= 0) {
 			perror("NP.PBP");
 			return errno;
 		}
-		size = pgd_decrypt(data_buf, size, 2, version_key);
+		size = pgd_decrypt(data, size, 2, version_key);
 		if (pgd_decrypt < 0) {
 			printf("NP.PBP: PGD decryption failed.\n");
 			return -1;
@@ -356,7 +362,7 @@ int main(int argc, char *argv[])
 			perror("OPNSSMP.BIN");
 			return errno;
 		}
-		if (fwrite(data_buf, size, 1, out) <= 0) {
+		if (fwrite(data, size, 1, out) <= 0) {
 			perror("OPNSSMP.BIN");
 			return errno;
 		}
@@ -364,6 +370,7 @@ int main(int argc, char *argv[])
 			perror("OPNSSMP.BIN");
 			return errno;
 		}
+		free(data);
 	}
 
 	start = *(u32*)(header+0x54); // 0x54 LBA start
@@ -372,6 +379,7 @@ int main(int argc, char *argv[])
 
 	block_size = *(u32*)(header+0x0c); // 0x0C block size?
 	block_size *= 2048;
+	data = malloc(block_size);
 	dec = malloc(block_size);
 	if (dec == NULL) {
 		perror(NULL);
@@ -391,7 +399,7 @@ int main(int argc, char *argv[])
 	blocks = table_size/32;
 
 	for(i=0; i<blocks; i++){
-		retv = NpegReadBlock(in, hdr.psar_offset, data_buf, dec, i);
+		retv = NpegReadBlock(in, hdr.psar_offset, data, dec, i);
 		if(retv<=0){
 			printf("Error %08x reading block %d\n", retv, i);
 			break;
