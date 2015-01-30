@@ -391,60 +391,51 @@ int write_pbp_part1(NPBASE *np, FILE *fp, char *iso_name)
 
 	offset = 0x28;
 
-	// param.sfo
-	printf("  writing PARAM.SFO ...\n");
+	printf("writing PARAM.SFO...\n");
 	*(u32*)(pbp_header+0x08) = offset;
 	memcpy(pbp_header+offset, np->param_sfo, np->param_sfo_size);
 	offset += np->param_sfo_size;
 
-	// icon0.png
 	if(ico0_size)
-		printf("  writing ICON0.PNG ...\n");
+		printf("writing ICON0.PNG...\n");
 	*(u32*)(pbp_header+0x0c) = offset;
 	memcpy(pbp_header+offset, ico0_buf, ico0_size);
 	offset += ico0_size;
 
-	// icon1.pmf
 	if(ico1_size)
-		printf("  writing ICON1.PMF ...\n");
+		printf("writing ICON1.PMF...\n");
 	*(u32*)(pbp_header+0x10) = offset;
 	memcpy(pbp_header+offset, ico1_buf, ico1_size);
 	offset += ico1_size;
 
-	// pic0.png
 	if(pic0_size)
-		printf("  writing PIC0.PNG ...\n");
+		printf("writing PIC0.PNG...\n");
 	*(u32*)(pbp_header+0x14) = offset;
 	memcpy(pbp_header+offset, pic0_buf, pic0_size);
 	offset += pic0_size;
 
-	// pic1.png
 	if(pic1_size)
-		printf("  writing PIC1.PNG ...\n");
+		printf("writing PIC1.PNG...\n");
 	*(u32*)(pbp_header+0x18) = offset;
 	memcpy(pbp_header+offset, pic1_buf, pic1_size);
 	offset += pic1_size;
 
-	// snd0.at3
 	if(snd0_size)
-		printf("  writing SND0.AT3 ...\n");
+		printf("writing SND0.AT3...\n");
 	*(u32*)(pbp_header+0x1c) = offset;
 	memcpy(pbp_header+offset, snd0_buf, snd0_size);
 	offset += snd0_size;
 
-	// data.psp
-	printf("  writing DATA.PSP ...\n");
+	printf("writing DATA.PSP...\n");
 	*(u32*)(pbp_header+0x20) = offset;
 	memcpy(pbp_header+offset, np->data_psp, np->data_psp_size);
 	offset += np->data_psp_size;
 
-	// data.psar
-	printf("  writing DATA.PSAR ...\n");
+	printf("writing DATA.PSAR...\n");
 	*(u32*)(pbp_header+0x24) = offset;
 	memcpy(pbp_header+offset, np->np_header, 256);
 	offset += 256;
 
-	// write part 1
 	fwrite(pbp_header, offset, 1, fp);
 
 	return offset;
@@ -470,58 +461,6 @@ void encrypt_table(u8 *table)
 
 /*************************************************************/
 
-void show_npinfo(NPBASE *np)
-{
-	printf("NP base: %s\n", np->name);
-	printf("   system ver : %s\n", np->sys_ver);
-	printf("   block size : %d\n", np->block_size);
-	printf("   total block: %d\n", np->total_block);
-	printf("   max size   : %d\n", np->max_size);
-	printf("\n");
-}
-
-void show_isoinfo(char *iso_name, int iso_block, int iso_size)
-{
-	u8 *sfo_buf, *eboot_buf;
-	int size, tag;
-	char disc_id[64], sys_ver[64];
-
-	memset(disc_id, 0, 64);
-	memset(sys_ver, 0, 64);
-	tag = 0;
-
-	sfo_buf = load_file_from_ISO(iso_name, "/PSP_GAME/PARAM.SFO", &size);
-	if(sfo_buf){
-		sfo_getkey(sfo_buf, "DISC_ID", disc_id);
-		sfo_getkey(sfo_buf, "PSP_SYSTEM_VER", sys_ver);
-	}
-
-	eboot_buf = load_file_from_ISO(iso_name, "/PSP_GAME/SYSDIR/EBOOT.BIN", &size);
-	if(eboot_buf){
-		if(*(u32*)eboot_buf!=0x464c457f){
-			tag = *(u32*)(eboot_buf+0xd0);
-		}
-	}
-
-	printf("Input: %s\n", iso_name);
-	printf("   DISC_ID    : %s\n", disc_id);
-	printf("   system ver : %s\n", sys_ver);
-	printf("   EBOOT tag  : %08x\n", tag);
-	printf("   iso block  : %d\n", iso_block);
-	printf("   iso size   : %d\n", iso_size);
-	printf("\n");
-
-	if(*(u32*)eboot_buf==0x464c457f){
-		printf("  The EBOOT.BIN in iso is a ELF file.\n");
-		printf("  Please sign your EBOOT.BIN first!\n");
-		printf("\n");
-		exit(-1);
-	}
-
-	free(eboot_buf);
-	free(sfo_buf);
-}
-
 int main(int argc, char *argv[])
 {
 	NPBASE *np_base;
@@ -529,7 +468,7 @@ int main(int argc, char *argv[])
 	CIPHER_KEY ckey;
 	FILE *iso_fp, *pbp_fp;
 	char *npb_name, *iso_name, *pbp_name;
-	int i, ap, do_comp, do_crypt, do_save_base;
+	int i, ap, do_comp, do_save_base;
 	int total_block, block_size;
 	int iso_size, iso_offset, iso_block;
 	int table_offset, table_size;
@@ -540,27 +479,27 @@ int main(int argc, char *argv[])
 	iso_name = NULL;
 	pbp_name = NULL;
 	do_comp = 0;
-	do_crypt = 1;
 	do_save_base = 0;
 	np_base = NULL;
 
 	// parameter process
 	while(ap<argc){
 		if(argv[ap][0]=='-'){
-			if(argv[ap][1]=='b'){
-				if(ap+1==argc)
+			switch (argv[ap][1]) {
+				case 'b':
+					ap++;
+					if(ap >= argc)
+						goto _help;
+					npb_name = argv[ap];
+					break;
+				case 'c':
+					do_comp = 1;
+					break;
+				case 'w':
+					do_save_base = 1;
+					break;
+				default:
 					goto _help;
-				npb_name = argv[ap+1];
-				ap += 1;
-			}else if(argv[ap][1]=='c'){
-				do_comp = 1;
-			}else if(argv[ap][1]=='w'){
-				do_save_base = 1;
-			}else if(argv[ap][1]=='e'){
-				do_crypt = 1;
-			}else{
-				printf(" unkonw param: %s\n", argv[ap]);
-				goto _help;
 			}
 		}else{
 			if(iso_name==NULL){
@@ -584,7 +523,6 @@ int main(int argc, char *argv[])
 		perror(NULL);
 		goto _help;
 	}
-	show_npinfo(np_base);
 	if(do_save_base==1){
 		save_base(np_base);
 	}
@@ -605,11 +543,6 @@ int main(int argc, char *argv[])
 	total_block = np_base->total_block;
 	block_size  = np_base->block_size;
 	iso_block = (iso_size+block_size-1)/block_size;
-
-	show_isoinfo(iso_name, iso_block, iso_size);
-
-
-	printf("Output: %s\n", pbp_name);
 	
 	// create PBP file
 	pbp_fp = fopen(pbp_name, "wb");
@@ -664,11 +597,9 @@ int main(int argc, char *argv[])
 		*(u32*)(tb+0x1c) = 0;
 
 		// encrypt block
-		if(do_crypt==1){
-			sceDrmBBCipherInit(&ckey, 1, 2, np_base->np_header+0xa0, np_base->key, iso_offset>>4);
-			sceDrmBBCipherUpdate(&ckey, wbuf, wsize);
-			sceDrmBBCipherFinal(&ckey);
-		}
+		sceDrmBBCipherInit(&ckey, 1, 2, np_base->np_header+0xa0, np_base->key, iso_offset>>4);
+		sceDrmBBCipherUpdate(&ckey, wbuf, wsize);
+		sceDrmBBCipherFinal(&ckey);
 
 		// generic MAC
 		sceDrmBBMacInit(&mkey, 3);
@@ -687,7 +618,7 @@ int main(int argc, char *argv[])
 
 		// update offset
 		iso_offset += wsize;
-		printf("\r  writing iso block ... %02d%%", i*100/iso_block);
+		printf("\rwriting iso block ... %02d%%", i*100/iso_block);
 	}
 	putchar('\n');
 
@@ -725,7 +656,6 @@ int main(int argc, char *argv[])
 	fseek(pbp_fp, table_offset, SEEK_SET);
 	fwrite(table_buf, table_size, 1, pbp_fp);
 	fclose(pbp_fp);
-	printf("Done.\n");
 	return 0;
 
 _help:
