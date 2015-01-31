@@ -103,10 +103,8 @@ static int npOpen(np_t *np, FILE *fp, uint32_t offset)
 	np->lbaEnd = *(uint32_t *)(hdr + 0x64);
 	np->lbaSize = np->lbaEnd - np->lbaStart + 1;
 
-	np->blkNum = np->tblSize / 32;
 	np->blkSize = *(uint32_t *)(hdr + 0x0c);
-	np->blkNum = (np->lbaSize + np->blkSize - 1) / np->blkSize;
-
+	np->blkNum = (np->lbaSize - 1) / np->blkSize;
 
 	np->tblSize = np->blkNum * 32;
 	np->tbl = malloc(np->tblSize);
