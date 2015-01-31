@@ -52,7 +52,7 @@ typedef struct {
 u8 dnas_key1A90[] = {0xED,0xE2,0x5D,0x2D,0xBB,0xF8,0x12,0xE5,0x3C,0x5C,0x59,0x32,0xFA,0xE3,0xE2,0x43};
 u8 dnas_key1AA0[] = {0x27,0x74,0xFB,0xEB,0xA4,0xA0,   1,0xD7,   2,0x56,0x9E,0x33,0x8C,0x19,0x57,0x83};
 
-PGD_DESC *pgd_open(u8 *pgd_buf, int pgd_flag, u8 *pgd_vkey)
+PGD_DESC *pgd_open(u8 *pgd_buf, int pgd_flag, const void *pgd_vkey)
 {
 	PGD_DESC *pgd;
 	MAC_KEY mkey;
@@ -141,7 +141,7 @@ PGD_DESC *pgd_open(u8 *pgd_buf, int pgd_flag, u8 *pgd_vkey)
 	return pgd;
 }
 
-int pgd_decrypt(u8 *pgd_buf, int pgd_size, int pgd_flag, u8 *pgd_vkey)
+int pgd_decrypt(u8 *pgd_buf, int pgd_size, int pgd_flag, const void *pgd_vkey)
 {
 	PGD_DESC *pgd;
 	MAC_KEY mkey;

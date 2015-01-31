@@ -127,7 +127,7 @@ static int npOpen(np_t *np, FILE *fp, uint32_t offset)
 	return 0;
 }
 
-static int npRead(np_t *np, FILE *fp, uint32_t offset, uint8_t *data_buf, uint8_t *out_buf, int block)
+static int npRead(np_t *np, FILE *fp, uint32_t offset, void *data_buf, void *out_buf, int block)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
@@ -177,16 +177,230 @@ static void npClose(const np_t *np)
 	free(np->tbl);
 }
 
+static int dumpStartdat(FILE *in, uint32_t psp_offset, const char *inpath, const char *outpath)
+{
+	FILE *out;
+	uint64_t magic;
+	uint32_t size;
+	void *buf;
+
+	if (fseek(in, psp_offset + 1440, SEEK_SET)) {
+		perror(inpath);
+		return -1;
+	}
+
+	if (fread(&magic, sizeof(magic), 1, in) <= 0) {
+		perror(inpath);
+		return -1;
+	}
+
+	if (magic != STARTDAT_MAGIC)
+		return 0;
+
+	if (fseek(in, 12, SEEK_CUR)) {
+		perror(inpath);
+		return -1;
+	}
+
+	if (fread(&size, sizeof(size), 1, in) <= 0) {
+		perror(inpath);
+		return -1;
+	}
+
+	size = le32toh(size);
+
+	buf = malloc(size);
+	if (buf == NULL) {
+		perror(NULL);
+		return -1;
+	}
+
+	printf("Dumping STARTDAT...\n");
+	if (fseek(in, 56, SEEK_CUR)) {
+		perror(inpath);
+		free(buf);
+		return -1;
+	}
+
+	if (fread(buf, size, 1, in) <= 0) {
+		perror(inpath);
+		free(buf);
+		return -1;
+	}
+
+	out = fopen(outpath, "wb");
+	if (out == NULL) {
+		perror(outpath);
+		free(buf);
+		return -1;
+	}
+
+	if (fwrite(buf, size, 1, out) != 1) {
+		perror(outpath);
+		free(buf);
+		fclose(out);
+		return -1;
+	}
+
+	if (fclose(out)) {
+		perror(outpath);
+		free(buf);
+		fclose(out);
+		return -1;
+	}
+
+	free(buf);
+
+	return size;
+}
+
+static int dumpOpnssmp(FILE *in, uint32_t psp_offset, const void *verKey, const char *inpath, const char *outpath)
+{
+	FILE *out;
+	uint32_t offset, size;
+	void *buf;
+
+	if (fseek(in, psp_offset + 48, SEEK_SET)) {
+		perror(inpath);
+		return -1;
+	}
+
+	if (fread(&offset, sizeof(offset), 1, in) <= 0) {
+		perror(inpath);
+		return -1;
+	}
+
+	if (!offset)
+		return 0;
+
+	if (fread(&size, sizeof(size), 1, in) <= 0) {
+		perror(inpath);
+		return -1;
+	}
+
+	offset = le32toh(offset);
+	size = le32toh(size);
+
+	buf = malloc(size);
+	if (buf == NULL) {
+		perror(NULL);
+		return -1;
+	}
+
+	printf("Dumping OPNSSMP...\n");
+	if (fseek(in, offset, SEEK_SET)) {
+		perror(inpath);
+		free(buf);
+		return -1;
+	}
+
+	if (fread(buf, size, 1, in) <= 0) {
+		perror(inpath);
+		free(buf);
+		return -1;
+	}
+
+	size = pgd_decrypt(buf, size, 2, verKey);
+	if (size < 0) {
+		printf("PGD decryption failed 0x%08X\n", size);
+		free(buf);
+		return -1;
+	}
+
+	out = fopen(outpath, "wb");
+	if (out == NULL) {
+		perror(outpath);
+		free(buf);
+		return -1;
+	}
+
+	if (fwrite(buf, size, 1, out) <= 0) {
+		perror(outpath);
+		free(buf);
+		fclose(out);
+		return -1;
+	}
+
+	if (fclose(out)) {
+		perror(outpath);
+		free(buf);
+		return -1;
+	}
+
+	free(buf);
+
+	return size;
+}
+
+static int dumpNpumdimg(FILE *in, uint32_t psar_offset, np_t *np, const char *outpath)
+{
+	FILE *out;
+	void *data, *dec;
+	int i, ret;
+
+	data = malloc(np->blkSize * 2048);
+	if (data == NULL) {
+		perror(NULL);
+		return -1;
+	}
+
+	dec = malloc(np->blkSize * 2048);
+	if (dec == NULL) {
+		perror(NULL);
+		free(data);
+		return -1;
+	}
+
+	out = fopen(outpath, "wb");
+	if (out == NULL){
+		perror(outpath);
+		free(data);
+		free(dec);
+		return -1;
+	}
+
+	for (i = 0; i < np->blkNum; i++) {
+		printf("Dumping NPUMDIMG... %3d%% %d/%d\r",
+			i * 100 / np->blkNum, i, np->blkNum);
+
+		ret = npRead(np, in, psar_offset, data, dec, i);
+		if (ret <= 0) {
+			printf("\nError %08X reading block %d\n", ret, i);
+			free(data);
+			free(dec);
+			fclose(out);
+			return ret;
+		}
+
+		if (fwrite(dec, ret, 1, out) != 1) {
+			perror(outpath);
+			free(data);
+			free(dec);
+			fclose(out);
+			return -1;
+		}
+	}
+	putchar('\n');
+
+	if (fclose(out)) {
+		perror(outpath);
+		free(data);
+		free(dec);
+		return -1;
+	}
+
+	free(data);
+	free(dec);
+
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	pbpHdr hdr;
 	np_t np;
-	int ret, i;
-	char iso_name[64];
-	uint64_t magic;
-	uint32_t offset, size;
-	void *data, *dec;
-	FILE *in, *out;
+	int ret;
+	FILE *in;
 
 	if (argc < 2) {
 		printf("NP Decryptor for PC\n"
@@ -207,155 +421,50 @@ int main(int argc, char *argv[])
 
 	if (fread(&hdr, sizeof(hdr), 1, in) <= 0) {
 		perror(argv[1]);
+		fclose(in);
 		return errno;
 	}
 
 	if(hdr.magic != PBP_MAGIC) {
 		printf("%s: Invalid PBP file.\n", argv[1]);
+		fclose(in);
 		return EILSEQ;
 	}
 
 	ret = npOpen(&np, in, hdr.psar_offset);
 	if(ret < 0) {
 		printf("%s: npOpen error %08x\n", argv[1], ret);
+		fclose(in);
 		return ret;
 	}
 
 	if (argc > 2)
 		if (chdir(argv[2])) {
 			perror(argv[2]);
+			fclose(in);
+			npClose(&np);
 			return errno;
 		}
 
-	if (fseek(in, hdr.psp_offset + 1440, SEEK_SET)) {
-		perror(argv[1]);
-		return errno;
-	}
-	if (fread(&magic, sizeof(magic), 1, in) <= 0) {
-		perror(argv[1]);
-		return errno;
-	}
-	if (magic == STARTDAT_MAGIC) {
-		if (fseek(in, 12, SEEK_CUR)) {
-			perror(argv[1]);
-			return errno;
-		}
-		if (fread(&size, sizeof(size), 1, in) <= 0) {
-			perror(argv[1]);
-			return errno;
-		}
-		size = le32toh(size);
-		data = malloc(size);
-		if (data == NULL) {
-			perror(NULL);
-			return errno;
-		}
-		if (fseek(in, 56, SEEK_CUR)) {
-			perror(argv[1]);
-			return errno;
-		}
-		if (fread(data, size, 1, in) <= 0) {
-			perror(argv[1]);
-			return errno;
-		}
-		out = fopen("STARTDAT.PNG", "wb");
-		if (out == NULL) {
-			perror("STARTDAT.PNG");
-			return errno;
-		}
-		if (fwrite(data, size, 1, out) != 1) {
-			perror("STARTDAT.PNG");
-			return errno;
-		}
-		if (fclose(out)) {
-			perror("STARTDAT.PNG");
-			return errno;
-		}
-		free(data);
-	}
-
-	if (fseek(in, hdr.psp_offset + 48, SEEK_SET)) {
-		perror(argv[1]);
-		return errno;
-	}
-	if (fread(&offset, sizeof(offset), 1, in) <= 0) {
-		perror(argv[1]);
-		return errno;
-	}
-	if (offset) {
-		if (fread(&size, sizeof(size), 1, in) <= 0) {
-			perror(argv[1]);
-			return errno;
-		}
-		offset = le32toh(offset);
-		size = le32toh(size);
-		data = malloc(size);
-		if (data == NULL) {
-			perror(NULL);
-			return errno;
-		}
-		if (fseek(in, offset, SEEK_SET)) {
-			perror(argv[1]);
-			return errno;
-		}
-		if (fread(data, size, 1, in) <= 0) {
-			perror(argv[1]);
-			return errno;
-		}
-		size = pgd_decrypt(data, size, 2, np.verKey);
-		if (pgd_decrypt < 0) {
-			printf("%s: PGD decryption failed.\n", argv[1]);
-			return -1;
-		}
-		out = fopen("OPNSSMP.BIN", "wb");
-		if (out == NULL) {
-			perror("OPNSSMP.BIN");
-			return errno;
-		}
-		if (fwrite(data, size, 1, out) <= 0) {
-			perror("OPNSSMP.BIN");
-			return errno;
-		}
-		if (fclose(out)) {
-			perror("OPNSSMP.BIN");
-			return errno;
-		}
-		free(data);
-	}
-
-	data = malloc(np.blkSize * 2048);
-	dec = malloc(np.blkSize * 2048);
-	if (dec == NULL) {
-		perror(NULL);
+	if (dumpStartdat(in, hdr.psp_offset, argv[1], "STARTDAT.PNG") < 0) {
+		fclose(in);
+		npClose(&np);
 		return errno;
 	}
 
-	printf("ISO size: %zd MB\n", np.lbaSize * 2048 / 0x100000);
-
-	out = fopen("NP.ISO", "wb");
-	if(out == NULL){
-		perror(iso_name);
+	if (dumpOpnssmp(in, hdr.psp_offset, np.verKey, argv[1], "OPNSSMP.BIN") < 0) {
+		fclose(in);
+		npClose(&np);
 		return errno;
 	}
 
-	for(i = 0; i < np.blkNum; i++){
-		ret = npRead(&np, in, hdr.psar_offset, data, dec, i);
-		if (ret <= 0) {
-			printf("\n%s: Error %08x reading block %d\n", argv[1], ret, i);
-			return ret;
-		}
-		fwrite(dec, ret, 1, out);
-
-		if (!(i & 0x0F))
-			printf("Dumping... %3d%% %d/%d    \r", i * 100 / np.blkNum, i, np.blkNum);
+	if (dumpNpumdimg(in, hdr.psar_offset, &np, "NPUMDIMG.ISO") < 0) {
+		fclose(in);
+		npClose(&np);
+		return errno;
 	}
-	printf("\n\n");
 
 	fclose(in);
-	fclose(out);
-	free(dec);
 	npClose(&np);
-
 	return 0;
 }
-
