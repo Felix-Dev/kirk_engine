@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include "utils.h"
 
 #include "kirk_engine.h"
@@ -196,22 +197,30 @@ int main(int argc, char *argv[])
 	void *data, *dec;
 	FILE *in, *out;
 
-	printf("NP Decryptor for PC. Writen by tpu.\n");
+	if (argc < 2) {
+		printf("NP Decryptor for PC\n"
+			" Copyright (C) 2011-2015 tpu, 173210\n"
+			" This software is licensed under GPLv3.\n"
+			"  usage: %s <EBOOT.PBP> [Ouput Directory]\n",
+			argv[0]);
+		return EINVAL;
+	}
+
 	kirk_init();
 
-	in = fopen("NP.PBP", "rb");
+	in = fopen(argv[1], "rb");
 	if(in == NULL) {
-		perror("NP.PBP");
+		perror(argv[1]);
 		return errno;
 	}
 
 	if (fread(&hdr, sizeof(hdr), 1, in) <= 0) {
-		perror("NP.PBP");
+		perror(argv[1]);
 		return errno;
 	}
 
 	if(hdr.magic != PBP_MAGIC) {
-		printf("Not a valid PBP file!\n");
+		printf("%s: Invalid PBP file.\n", argv[1]);
 		return EILSEQ;
 	}
 
@@ -221,21 +230,27 @@ int main(int argc, char *argv[])
 		return -1;
 	}
 
+	if (argc > 2)
+		if (chdir(argv[2])) {
+			perror(argv[2]);
+			return errno;
+		}
+
 	if (fseek(in, hdr.psp_offset + 1428 + offsetof(sdHdr, magic), SEEK_SET)) {
-		perror("NP.PBP");
+		perror(argv[1]);
 		return errno;
 	}
 	if (fread(&magic, sizeof(magic), 1, in) <= 0) {
-		perror("NP.PBP");
+		perror(argv[1]);
 		return errno;
 	}
 	if (magic == STARTDAT_MAGIC) {
 		if (fseek(in, hdr.psp_offset + 1428 + offsetof(sdHdr, dataSize), SEEK_SET)) {
-			perror("NP.PBP");
+			perror(argv[1]);
 			return errno;
 		}
 		if (fread(&size, sizeof(size), 1, in) <= 0) {
-			perror("NP.PBP");
+			perror(argv[1]);
 			return errno;
 		}
 		data = malloc(size);
@@ -244,11 +259,11 @@ int main(int argc, char *argv[])
 			return errno;
 		}
 		if (fseek(in, hdr.psp_offset + 1428 + sizeof(sdHdr), SEEK_SET)) {
-			perror("NP.PBP");
+			perror(argv[1]);
 			return errno;
 		}
 		if (fread(data, size, 1, in) <= 0) {
-			perror("NP.PBP");
+			perror(argv[1]);
 			return errno;
 		}
 		out = fopen("STARTDAT.PNG", "wb");
@@ -268,16 +283,16 @@ int main(int argc, char *argv[])
 	}
 
 	if (fseek(in, hdr.psp_offset + 48, SEEK_SET)) {
-		perror("NP.PBP");
+		perror(argv[1]);
 		return errno;
 	}
 	if (fread(&offset, sizeof(offset), 1, in) <= 0) {
-		perror("NP.PBP");
+		perror(argv[1]);
 		return errno;
 	}
 	if (offset) {
 		if (fread(&size, sizeof(size), 1, in) <= 0) {
-			perror("NP.PBP");
+			perror(argv[1]);
 			return errno;
 		}
 		data = malloc(size);
@@ -286,16 +301,16 @@ int main(int argc, char *argv[])
 			return errno;
 		}
 		if (fseek(in, offset, SEEK_SET)) {
-			perror("NP.PBP");
+			perror(argv[1]);
 			return errno;
 		}
 		if (fread(data, size, 1, in) <= 0) {
-			perror("NP.PBP");
+			perror(argv[1]);
 			return errno;
 		}
 		size = pgd_decrypt(data, size, 2, np.verKey);
 		if (pgd_decrypt < 0) {
-			printf("NP.PBP: PGD decryption failed.\n");
+			printf("%s: PGD decryption failed.\n", argv[1]);
 			return -1;
 		}
 		out = fopen("OPNSSMP.BIN", "wb");
@@ -321,7 +336,7 @@ int main(int argc, char *argv[])
 		return errno;
 	}
 
-	printf("ISO size: %zd MB\n", np.lbaSize * 2048 / 0x100000);
+	printf("ISO size: %zd MB\n", argv[1], np.lbaSize * 2048 / 0x100000);
 
 	out = fopen("NP.ISO", "wb");
 	if(out == NULL){
@@ -332,7 +347,7 @@ int main(int argc, char *argv[])
 	for(i = 0; i < np.blkNum; i++){
 		retv = npRead(&np, in, hdr.psar_offset, data, dec, i);
 		if(retv<=0){
-			printf("Error %08x reading block %d\n", retv, i);
+			printf("\n%s: Error %08x reading block %d\n", argv[1], retv, i);
 			break;
 		}
 		fwrite(dec, retv, 1, out);
