@@ -30,16 +30,6 @@ typedef struct pbpHdr {
 } pbpHdr;
 
 typedef struct {
-	uint8_t unk0[12];
-	uint64_t magic;
-	uint32_t unk1;
-	uint32_t unk2;
-	uint32_t hdrSize;
-	uint32_t dataSize;
-	uint8_t unk3[56];
-} sdHdr;
-
-typedef struct {
 	uint8_t hdrKey[16];
 	uint8_t verKey[16];
 	uint8_t *tbl;
@@ -191,7 +181,7 @@ int main(int argc, char *argv[])
 {
 	pbpHdr hdr;
 	np_t np;
-	int retv, i;
+	int ret, i;
 	char iso_name[64];
 	uint64_t magic;
 	uint32_t offset, size;
@@ -225,10 +215,10 @@ int main(int argc, char *argv[])
 		return EILSEQ;
 	}
 
-	retv = npOpen(&np, in, hdr.psar_offset);
-	if(retv < 0) {
-		printf("NpegOpen Error! %08x\n", retv);
-		return -1;
+	ret = npOpen(&np, in, hdr.psar_offset);
+	if(ret < 0) {
+		printf("%s: npOpen error %08x\n", argv[1], ret);
+		return ret;
 	}
 
 	if (argc > 2)
@@ -237,7 +227,7 @@ int main(int argc, char *argv[])
 			return errno;
 		}
 
-	if (fseek(in, hdr.psp_offset + 1428 + offsetof(sdHdr, magic), SEEK_SET)) {
+	if (fseek(in, hdr.psp_offset + 1440, SEEK_SET)) {
 		perror(argv[1]);
 		return errno;
 	}
@@ -246,7 +236,7 @@ int main(int argc, char *argv[])
 		return errno;
 	}
 	if (magic == STARTDAT_MAGIC) {
-		if (fseek(in, hdr.psp_offset + 1428 + offsetof(sdHdr, dataSize), SEEK_SET)) {
+		if (fseek(in, 12, SEEK_CUR)) {
 			perror(argv[1]);
 			return errno;
 		}
@@ -254,12 +244,13 @@ int main(int argc, char *argv[])
 			perror(argv[1]);
 			return errno;
 		}
+		size = le32toh(size);
 		data = malloc(size);
 		if (data == NULL) {
 			perror(NULL);
 			return errno;
 		}
-		if (fseek(in, hdr.psp_offset + 1428 + sizeof(sdHdr), SEEK_SET)) {
+		if (fseek(in, 56, SEEK_CUR)) {
 			perror(argv[1]);
 			return errno;
 		}
@@ -296,6 +287,8 @@ int main(int argc, char *argv[])
 			perror(argv[1]);
 			return errno;
 		}
+		offset = le32toh(offset);
+		size = le32toh(size);
 		data = malloc(size);
 		if (data == NULL) {
 			perror(NULL);
@@ -346,16 +339,15 @@ int main(int argc, char *argv[])
 	}
 
 	for(i = 0; i < np.blkNum; i++){
-		retv = npRead(&np, in, hdr.psar_offset, data, dec, i);
-		if(retv<=0){
-			printf("\n%s: Error %08x reading block %d\n", argv[1], retv, i);
-			break;
+		ret = npRead(&np, in, hdr.psar_offset, data, dec, i);
+		if (ret <= 0) {
+			printf("\n%s: Error %08x reading block %d\n", argv[1], ret, i);
+			return ret;
 		}
-		fwrite(dec, retv, 1, out);
+		fwrite(dec, ret, 1, out);
 
-		if((i&0x0f)==0){
+		if (!(i & 0x0F))
 			printf("Dumping... %3d%% %d/%d    \r", i * 100 / np.blkNum, i, np.blkNum);
-		}
 	}
 	printf("\n\n");
 
