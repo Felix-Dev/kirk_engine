@@ -15,5 +15,5 @@ $(TARGET): $(OBJS)
 	$(CC) $(CFLAGS) -o $@ $(OBJS) -L ../kirk -lkirk -lz
 
 clean:
-	$(RM) *.o $(TARGET) *.exe *.exe.stackdump
+	rm -f $(OBJS) $(TARGET) $(TARGET).exe $(TARGET).exe.stackdump
 
