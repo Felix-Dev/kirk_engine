@@ -142,7 +142,7 @@ static int npRead(np_t *np, FILE *fp, uint32_t offset, uint8_t *data_buf, uint8_
 	int ret;
 	uint32_t *tp;
 
-	tp = (uint32_t *)(np->tbl + block*32);
+	tp = (uint32_t *)(np->tbl + block * 32);
 	if (tp[7]) {
 		errno = EILSEQ;
 		return -1;
@@ -151,7 +151,7 @@ static int npRead(np_t *np, FILE *fp, uint32_t offset, uint8_t *data_buf, uint8_
 	if (fseek(fp, offset + tp[4], SEEK_SET))
 		return -1;
 
-	if (fread(data_buf, tp[5], 1, fp))
+	if (fread(data_buf, tp[5], 1, fp) <= 0)
 		return -1;
 
 	if (!(tp[6] & 1)) {
