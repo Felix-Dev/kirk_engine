@@ -12,8 +12,9 @@
 #include "pgd.c"
 #include "tlzrc.c"
 
-#define PBP_MAGIC 0x50425000
-#define STARTDAT_MAGIC 0x5441445452415453
+#define PBP_MAGIC htobe32(0x00504250) // "\0PBP"
+#define NPUMDIMG_MAGIC htobe64(0x4E50554D44494D47) // "NPUMDIMG"
+#define STARTDAT_MAGIC htobe64(0x5354415254444154) // "STARTDAT"
 
 typedef struct pbpHdr {
 	uint32_t magic;
@@ -69,7 +70,7 @@ static int npOpen(np_t *np, FILE *fp, uint32_t offset)
 	if (fread(hdr, sizeof(hdr), 1, fp) <= 0)
 		return -1;
 
-	if (strncmp(hdr, "NPUMDIMG", 8)){
+	if (*(uint64_t *)hdr != NPUMDIMG_MAGIC) {
 		printf("DATA.PSAR isn't a NPUMDIMG!\n");
 		errno = EILSEQ;
 		return -1;
@@ -100,18 +101,18 @@ static int npOpen(np_t *np, FILE *fp, uint32_t offset)
 		printf("%02X", np->hdrKey[i]);
 	putchar('\n');
 
-	np->lbaStart = *(uint32_t *)(hdr + 0x54);
-	np->lbaEnd = *(uint32_t *)(hdr + 0x64);
+	np->lbaStart = le32toh(*(uint32_t *)(hdr + 0x54));
+	np->lbaEnd = le32toh(*(uint32_t *)(hdr + 0x64));
 	np->lbaSize = np->lbaEnd - np->lbaStart + 1;
 
-	np->blkSize = *(uint32_t *)(hdr + 0x0c);
+	np->blkSize = le32toh(*(uint32_t *)(hdr + 0x0c));
 	np->blkNum = (np->lbaSize - 1) / np->blkSize;
 
 	np->tblSize = np->blkNum * 32;
 	np->tbl = malloc(np->tblSize);
 	if (np->tbl == NULL)
 		return -1;
-	if (fseek(fp, offset + *(uint32_t *)(hdr + 0x6C), SEEK_SET))
+	if (fseek(fp, offset + le32toh(*(uint32_t *)(hdr + 0x6C)), SEEK_SET))
 		return -1;
 	if (fread(np->tbl, np->tblSize, 1, fp) <= 0)
 		return -1;
@@ -125,10 +126,10 @@ static int npOpen(np_t *np, FILE *fp, uint32_t offset)
 
 	tp = (uint32_t *)np->tbl;
 	for (i = 0; i < np->blkNum; i++) {
-		tp[4] ^= tp[2] ^ tp[3];
-		tp[5] ^= tp[1] ^ tp[2];
-		tp[6] ^= tp[0] ^ tp[3];
-		tp[7] ^= tp[0] ^ tp[1];
+		tp[4] = le32toh(tp[4] ^ tp[2] ^ tp[3]);
+		tp[5] = le32toh(tp[5] ^ tp[1] ^ tp[2]);
+		tp[6] = le32toh(tp[6] ^ tp[0] ^ tp[3]);
+		tp[7] = le32toh(tp[7] ^ tp[0] ^ tp[1]);
 
 		tp += 8;
 	}

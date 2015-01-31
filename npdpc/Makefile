@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = -Wall -I../kirk -I../common
+CFLAGS = -Wall -fno-strict-aliasing -I../kirk -I../common
 TARGET = npdpc
 OBJS = my_npd.o ../common/utils.o
 
