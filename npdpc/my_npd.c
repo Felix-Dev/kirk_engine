@@ -141,62 +141,45 @@ static int NpegReadBlock(np_t *np, FILE *fp, uint32_t offset, uint8_t *data_buf,
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
-	int retv;
+	int ret;
 	uint32_t *tp;
 
-	tp = (uint32_t*)(np->tbl+block*32);
-	if(tp[7]!=0){
-		if(block==(np->blkNum-1))
-			return 0x00008000;
-		else
-			return -1;
+	tp = (uint32_t *)(np->tbl + block*32);
+	if (tp[7]) {
+		errno = EILSEQ;
+		return -1;
 	}
 
-	if (fseek(fp, offset + tp[4], SEEK_SET)) {
-		if(block==(np->blkNum-1))
-			return 0x00008000;
-		else
-			return -1;
-	}
+	if (fseek(fp, offset + tp[4], SEEK_SET))
+		return -1;
 
-	retv = fread(data_buf, tp[5], 1, fp);
-	if(retv!=1){
-		if(block==(np->blkNum-1))
-			return 0x00008000;
-		else
-			return -2;
-	}
+	if (fread(data_buf, tp[5], 1, fp))
+		return -1;
 
-	if((tp[6]&1)==0){
+	if (!(tp[6] & 1)) {
 		sceDrmBBMacInit(&mkey, 3);
 		sceDrmBBMacUpdate(&mkey, data_buf, tp[5]);
-		retv = sceDrmBBMacFinal2(&mkey, (uint8_t*)tp, np->verKey);
-		if(retv<0){
-			if(block==(np->blkNum-1))
-				return 0x00008000;
-			else
-				return -5;
-		}
+		ret = sceDrmBBMacFinal2(&mkey, (uint8_t*)tp, np->verKey);
+		if (ret)
+			return ret;
 	}
 
-	if((tp[6]&4)==0){
-		sceDrmBBCipherInit(&ckey, 1, 2, np->hdrKey, np->verKey, tp[4]>>4);
+	if (!(tp[6] & 4)) {
+		sceDrmBBCipherInit(&ckey, 1, 2, np->hdrKey, np->verKey, tp[4] >> 4);
 		sceDrmBBCipherUpdate(&ckey, data_buf, tp[5]);
 		sceDrmBBCipherFinal(&ckey);
 	}
 
-	if(tp[5]<np->blkSize*2048){
-		retv = lzrc_decompress(out_buf, 0x00100000, data_buf, tp[5]);
-		if(retv!=np->blkSize*2048){
-			printf("LZR decompress error! retv=%d\n", retv);
-		}
-
-	}else{
+	if (tp[5] < np->blkSize * 2048) {
+		ret = lzrc_decompress(out_buf, 0x00100000, data_buf, tp[5]);
+		if (ret != np->blkSize * 2048)
+			printf("LZR decompress error! retv=%d\n", ret);
+	} else {
 		memcpy(out_buf, data_buf, tp[5]);
-		retv = 0x00008000;
+		ret = 0x00008000;
 	}
 
-	return retv;
+	return ret;
 }
 
 static void NpegClose(const np_t *np)
