@@ -53,14 +53,12 @@ static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
-	int offset_table;
-	int retv, i;
+	int ret, i;
 	char hdr[208];
 	uint32_t *tp;
 	uint8_t bbmac[16];
-	int msize;
 
-	if(fp == NULL || np == NULL) {
+	if (np == NULL || fp == NULL) {
 		errno = EFAULT;
 		return -1;
 	}
@@ -70,9 +68,10 @@ static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
 	if (fread(hdr, sizeof(hdr), 1, fp) <= 0)
 		return -1;
 
-	if(strncmp(hdr, "NPUMDIMG", 8)){
+	if (strncmp(hdr, "NPUMDIMG", 8)){
 		printf("DATA.PSAR isn't a NPUMDIMG!\n");
-		return -7;
+		errno = EILSEQ;
+		return -1;
 	}
 
 	sceDrmBBMacInit(&mkey, 3);
@@ -81,10 +80,10 @@ static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
 
 	sceDrmBBMacInit(&mkey, 3);
 	sceDrmBBMacUpdate(&mkey, hdr, 0xc0);
-	retv = sceDrmBBMacFinal2(&mkey, hdr + 0xc0, np->verKey);
-	if(retv){
+	ret = sceDrmBBMacFinal2(&mkey, hdr + 0xc0, np->verKey);
+	if (ret) {
 		printf("NP Header MAC check failed!\n");
-		return -13;
+		return ret;
 	}
 
 	memcpy(np->hdrKey, hdr + 0xa0, 0x10);
@@ -108,26 +107,20 @@ static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
 	np->blkSize = *(uint32_t *)(hdr + 0x0c);
 	np->blkNum = (np->lbaSize + np->blkSize - 1) / np->blkSize;
 
-	offset_table = *(uint32_t*)(hdr + 0x6c);
-	fseek(fp, offset + offset_table, SEEK_SET);
 
-	np->tblSize = np->blkNum*32;
+	np->tblSize = np->blkNum * 32;
 	np->tbl = malloc(np->tblSize);
 	if (np->tbl == NULL)
 		return -1;
-	retv = fread(np->tbl, np->tblSize, 1, fp);
-	if(retv!=1)
-		return -18;
+	if (fseek(fp, offset + *(uint32_t *)(hdr + 0x6C), SEEK_SET))
+		return -1;
+	if (fread(np->tbl, np->tblSize, 1, fp) <= 0)
+		return -1;
 
 	// table mac test
 	sceDrmBBMacInit(&mkey, 3);
-	for(i=0; i<np->tblSize; i+=0x8000){
-		if(i+0x8000>np->tblSize)
-			msize = np->tblSize-i;
-		else
-			msize = 0x8000;
-		sceDrmBBMacUpdate(&mkey, np->tbl+i, msize);
-	}
+	for (i = 0; i < np->tblSize; i+=0x8000)
+		sceDrmBBMacUpdate(&mkey, np->tbl+i, i + 0x8000 > np->tblSize ? np->tblSize - i : 0x8000);
 	sceDrmBBMacFinal(&mkey, bbmac, np->verKey);
 	bbmac_build_final2(3, bbmac);
 
