@@ -49,7 +49,7 @@ typedef struct {
 	size_t lbaSize;
 } np_t;
 
-static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
+static int npOpen(np_t *np, FILE *fp, uint32_t offset)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
@@ -137,7 +137,7 @@ static int NpegOpen(np_t *np, FILE *fp, uint32_t offset)
 	return 0;
 }
 
-static int NpegReadBlock(np_t *np, FILE *fp, uint32_t offset, uint8_t *data_buf, uint8_t *out_buf, int block)
+static int npRead(np_t *np, FILE *fp, uint32_t offset, uint8_t *data_buf, uint8_t *out_buf, int block)
 {
 	MAC_KEY mkey;
 	CIPHER_KEY ckey;
@@ -182,7 +182,7 @@ static int NpegReadBlock(np_t *np, FILE *fp, uint32_t offset, uint8_t *data_buf,
 	return ret;
 }
 
-static void NpegClose(const np_t *np)
+static void npClose(const np_t *np)
 {
 	free(np->tbl);
 }
@@ -217,7 +217,7 @@ int main(int argc, char *argv[])
 		return EILSEQ;
 	}
 
-	retv = NpegOpen(&np, in, hdr.psar_offset);
+	retv = npOpen(&np, in, hdr.psar_offset);
 	if(retv < 0) {
 		printf("NpegOpen Error! %08x\n", retv);
 		return -1;
@@ -332,7 +332,7 @@ int main(int argc, char *argv[])
 	}
 
 	for(i = 0; i < np.blkNum; i++){
-		retv = NpegReadBlock(&np, in, hdr.psar_offset, data, dec, i);
+		retv = npRead(&np, in, hdr.psar_offset, data, dec, i);
 		if(retv<=0){
 			printf("Error %08x reading block %d\n", retv, i);
 			break;
@@ -348,7 +348,7 @@ int main(int argc, char *argv[])
 	fclose(in);
 	fclose(out);
 	free(dec);
-	NpegClose(&np);
+	npClose(&np);
 
 	return 0;
 }
