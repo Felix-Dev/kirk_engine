@@ -336,7 +336,7 @@ int main(int argc, char *argv[])
 		return errno;
 	}
 
-	printf("ISO size: %zd MB\n", argv[1], np.lbaSize * 2048 / 0x100000);
+	printf("ISO size: %zd MB\n", np.lbaSize * 2048 / 0x100000);
 
 	out = fopen("NP.ISO", "wb");
 	if(out == NULL){
