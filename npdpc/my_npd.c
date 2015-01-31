@@ -159,7 +159,7 @@ static int npRead(np_t *np, FILE *fp, uint32_t offset, uint8_t *data_buf, uint8_
 	if (!(tp[6] & 1)) {
 		sceDrmBBMacInit(&mkey, 3);
 		sceDrmBBMacUpdate(&mkey, data_buf, tp[5]);
-		ret = sceDrmBBMacFinal2(&mkey, (uint8_t*)tp, np->verKey);
+		ret = sceDrmBBMacFinal2(&mkey, tp, np->verKey);
 		if (ret)
 			return ret;
 	}
