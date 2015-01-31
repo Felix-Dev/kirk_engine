@@ -1,7 +1,7 @@
 CC = gcc
 CFLAGS = -Wall -fno-strict-aliasing -I../kirk -I../common
 TARGET = npdpc
-OBJS = my_npd.o ../common/utils.o
+OBJS = main.o
 
 ifeq ($(DEBUG), 1)
 CFLAGS+=-g -O0
