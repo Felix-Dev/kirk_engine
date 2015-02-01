@@ -31,8 +31,15 @@
 #include "tlzrc.c"
 
 #define PBP_MAGIC htobe32(0x00504250) // "\0PBP"
+#define PSF_MAGIC htobe32(0x00505346) // "\0PSF"
 #define NPUMDIMG_MAGIC htobe64(0x4E50554D44494D47) // "NPUMDIMG"
 #define STARTDAT_MAGIC htobe64(0x5354415254444154) // "STARTDAT"
+
+enum {
+	SFO_FMT_UTF8S = 0,
+	SFO_FMT_UTF8 = 2,
+	SFO_FMT_INT32 = 4
+};
 
 typedef struct pbpHdr {
 	uint32_t magic;
@@ -46,6 +53,23 @@ typedef struct pbpHdr {
 	uint32_t psp_offset;
 	uint32_t psar_offset;
 } pbpHdr;
+
+typedef struct {
+	uint32_t magic;
+	uint32_t ver;
+	uint32_t key_offset;
+	uint32_t val_offset;
+	uint32_t cnt;
+} sfoHdr;
+
+typedef struct {
+	uint16_t key_offset;
+	uint8_t align;
+	uint8_t fmt;
+	uint32_t val_size;
+	uint32_t align_size;
+	uint32_t val_offset;
+} sfoEnt;
 
 typedef struct {
 	uint8_t hdrKey[16];
@@ -211,6 +235,183 @@ static int dumpKeys(const np_t *np)
 	for (i = 0; i < 16; i++)
 		printf("%02X", np->hdrKey[i]);
 	putchar('\n');
+
+	return 0;
+}
+
+static int dumpParam(FILE *in, uint32_t param_offset, const char *inpath, const char *outpath)
+{
+	FILE *out;
+	sfoHdr hdr;
+	sfoEnt ent;
+	uint32_t i;
+	long offset;
+	char buf[3168];
+	const char *p;
+	const char sfxHdr[] = "<?xml version=\"1\" encoding=\"utf-8\" standalone=\"yes\"?>\n"
+		"<paramsfo add_hidden=\"false\">\n";
+	const char paramEnd[] = "</param>\n";
+	const char sfxFtr[] = "</paramsfo>\n";
+
+	if (in == NULL || inpath == NULL || outpath == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	if (!param_offset)
+		return 0;
+
+	if (fseek(in, param_offset, SEEK_SET)) {
+		perror(inpath);
+		return -1;
+	}
+
+	if (fread(&hdr, sizeof(hdr), 1, in) <= 0) {
+		perror(inpath);
+		return -1;
+	}
+
+	if (hdr.magic != PSF_MAGIC) {
+		printf("PSF magic is invalid.\n");
+		errno = EILSEQ;
+		return -1;
+	}
+
+	hdr.key_offset = param_offset + le32toh(hdr.key_offset);
+	hdr.val_offset = param_offset + le32toh(hdr.val_offset);
+	hdr.cnt = le32toh(hdr.cnt);
+
+	printf("Dumping PARAMS...\n");
+
+	out = fopen(outpath, "w");
+	if (out == NULL) {
+		perror(outpath);
+		return -1;
+	}
+
+	if (fwrite(sfxHdr, sizeof(sfxHdr) - 1, 1, out) != 1) {
+		perror(outpath);
+		fclose(out);
+		return -1;
+	}
+
+	offset = param_offset + sizeof(hdr);
+	while (hdr.cnt) {
+		if (fseek(in, offset, SEEK_SET)) {
+			perror(inpath);
+			fclose(out);
+			return -1;
+		}
+
+		if (fread(&ent, sizeof(ent), 1, in) <= 0) {
+			perror(inpath);
+			fclose(out);
+			return -1;
+		}
+
+		ent.key_offset = hdr.key_offset + le16toh(ent.key_offset);
+		ent.val_size = le32toh(ent.val_size);
+		ent.val_offset = hdr.val_offset + le32toh(ent.val_offset);
+
+		if (fseek(in, ent.key_offset, SEEK_SET)) {
+			perror(inpath);
+			fclose(out);
+			return -1;
+		}
+
+		if (fgets(buf, sizeof(buf), in) <= 0) {
+			perror(inpath);
+			fclose(out);
+			return -1;
+		}
+
+		if (ent.val_size > sizeof(buf)) {
+			printf("SFO value is too long.\n");
+			fclose(out);
+			errno = EILSEQ;
+			return -1;
+		}
+
+		switch (ent.fmt) {
+			case SFO_FMT_UTF8S:
+				p = "utf8-S";
+				break;
+			case SFO_FMT_UTF8:
+				p = "utf8";
+				break;
+			case SFO_FMT_INT32:
+				p = "int32";
+				break;
+			default:
+				printf("SFO unknown key type: %d\n", ent.fmt);
+				errno = EILSEQ;
+				return -1;
+		}
+
+		if (fprintf(out, "\t<param key=\"%s\" fmt=\"%s\" max_len=\"%d\">",
+			buf, p, ent.val_size) <= 0) {
+			perror(outpath);
+			fclose(out);
+			return -1;
+		}
+
+		if (fseek(in, ent.val_offset, SEEK_SET)) {
+			perror(inpath);
+			fclose(out);
+			return -1;
+		}
+
+		if (fread(buf, ent.val_size, 1, in) <= 0) {
+			perror(inpath);
+			fclose(out);
+			return -1;
+		}
+
+		switch (ent.fmt) {
+			case SFO_FMT_UTF8S:
+				for (i = 0; i < ent.val_size; i++)
+					if (fprintf(out, "%02X", buf[i]) <= 0) {
+						perror(outpath);
+						fclose(out);
+						return -1;
+					}
+				break;
+			case SFO_FMT_UTF8:
+				if (fwrite(buf, ent.val_size - 1, 1, out) != 1) {
+					perror(outpath);
+					fclose(out);
+					return -1;
+				}
+				break;
+			case SFO_FMT_INT32:
+				if (fprintf(out, "%d", (int)le32toh(*(uint32_t *)buf)) <= 0) {
+					perror(outpath);
+					fclose(out);
+					return -1;
+				}
+				break;
+		}
+
+		if (fwrite(paramEnd, sizeof(paramEnd) - 1, 1, out) != 1) {
+			perror(outpath);
+			fclose(out);
+			return -1;
+		}
+
+		offset += sizeof(ent);
+		hdr.cnt--;
+	}
+
+	if (fwrite(sfxFtr, sizeof(sfxFtr) - 1, 1, out) != 1) {
+		perror(outpath);
+		fclose(out);
+		return -1;
+	}
+
+	if (fclose(out)) {
+		perror(outpath);
+		return -1;
+	}
 
 	return 0;
 }
@@ -502,6 +703,11 @@ int main(int argc, char *argv[])
 	if (dumpKeys(&np) < 0) {
 		fclose(in);
 		npClose(&np);
+		return errno;
+	}
+
+	if (dumpParam(in, hdr.param_offset, argv[1], "PARAM.SFX") < 0) {
+		fclose(in);
 		return errno;
 	}
 
