@@ -101,14 +101,6 @@ static int npOpen(np_t *np, FILE *fp, uint32_t offset)
 	sceDrmBBCipherUpdate(&ckey, hdr + 0x40, 0x60);
 	sceDrmBBCipherFinal(&ckey);
 
-	printf("NPUMDIMG Version Key: 0x");
-	for (i = 0; i < 16; i++)
-		printf("%02X", np->verKey[i]);
-	printf("\nNPUMDIMG Header Key:  0x");
-	for (i = 0; i < 16; i++)
-		printf("%02X", np->hdrKey[i]);
-	putchar('\n');
-
 	np->lbaStart = le32toh(*(uint32_t *)(hdr + 0x54));
 	np->lbaEnd = le32toh(*(uint32_t *)(hdr + 0x64));
 	np->lbaSize = np->lbaEnd - np->lbaStart + 1;
@@ -201,6 +193,26 @@ static void npClose(const np_t *np)
 		errno = EINVAL;
 	else
 		free(np->tbl);
+}
+
+static int dumpKeys(const np_t *np)
+{
+	int i;
+
+	if (np == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	printf("NPUMDIMG Version Key: 0x");
+	for (i = 0; i < 16; i++)
+		printf("%02X", np->verKey[i]);
+	printf("\nNPUMDIMG Header Key:  0x");
+	for (i = 0; i < 16; i++)
+		printf("%02X", np->hdrKey[i]);
+	putchar('\n');
+
+	return 0;
 }
 
 static int dumpStartdat(FILE *in, uint32_t psp_offset, const char *inpath, const char *outpath)
@@ -486,6 +498,12 @@ int main(int argc, char *argv[])
 			npClose(&np);
 			return errno;
 		}
+
+	if (dumpKeys(&np) < 0) {
+		fclose(in);
+		npClose(&np);
+		return errno;
+	}
 
 	if (dumpStartdat(in, hdr.psp_offset, argv[1], "STARTDAT.PNG") < 0) {
 		fclose(in);
