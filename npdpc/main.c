@@ -301,7 +301,7 @@ static int dumpParam(FILE *in, uint32_t param_offset, const char *inpath, const 
 	hdr.val_offset = param_offset + le32toh(hdr.val_offset);
 	hdr.cnt = le32toh(hdr.cnt);
 
-	printf("Dumping PARAMS...\n");
+	printf("Dumping PARAM...\n");
 
 	out = fopen(outpath, "w");
 	if (out == NULL) {
@@ -733,6 +733,7 @@ int main(int argc, char *argv[])
 
 	if (dumpParam(in, hdr.param_offset, argv[1], "PARAM.SFX") < 0) {
 		fclose(in);
+		npClose(&np);
 		return errno;
 	}
 
