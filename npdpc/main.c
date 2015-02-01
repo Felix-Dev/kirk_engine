@@ -152,6 +152,11 @@ static int npRead(np_t *np, FILE *fp, uint32_t offset, void *data_buf, void *out
 	int ret;
 	uint32_t *tp;
 
+	if (np == NULL || fp == NULL || data_buf == NULL || out_buf == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
 	tp = (uint32_t *)(np->tbl + block * 32);
 	if (tp[7]) {
 		errno = EILSEQ;
@@ -192,7 +197,10 @@ static int npRead(np_t *np, FILE *fp, uint32_t offset, void *data_buf, void *out
 
 static void npClose(const np_t *np)
 {
-	free(np->tbl);
+	if (np == NULL)
+		errno = EINVAL;
+	else
+		free(np->tbl);
 }
 
 static int dumpStartdat(FILE *in, uint32_t psp_offset, const char *inpath, const char *outpath)
@@ -201,6 +209,11 @@ static int dumpStartdat(FILE *in, uint32_t psp_offset, const char *inpath, const
 	uint64_t magic;
 	uint32_t size;
 	void *buf;
+
+	if (in == NULL || inpath == NULL || outpath == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
 
 	if (fseek(in, psp_offset + 1440, SEEK_SET)) {
 		perror(inpath);
@@ -277,6 +290,11 @@ static int dumpOpnssmp(FILE *in, uint32_t psp_offset, const void *verKey, const 
 	FILE *out;
 	uint32_t offset, size;
 	void *buf;
+
+	if (in == NULL || verKey == NULL || inpath == NULL || outpath == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
 
 	if (fseek(in, psp_offset + 48, SEEK_SET)) {
 		perror(inpath);
@@ -355,6 +373,11 @@ static int dumpNpumdimg(FILE *in, uint32_t psar_offset, np_t *np, const char *ou
 	FILE *out;
 	void *data, *dec;
 	int i, ret;
+
+	if (in == NULL || np == NULL || outpath == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
 
 	data = malloc(np->blkSize * 2048);
 	if (data == NULL) {
