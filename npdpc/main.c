@@ -259,6 +259,59 @@ static int dumpKeys(const np_t *np)
 	return 0;
 }
 
+static int dumpRaw(FILE *in, long offset, size_t size, const char *inpath, const char *outpath)
+{
+	FILE *out;
+	void *buf;
+
+	if (in == NULL || inpath == NULL || outpath == NULL) {
+		errno = EINVAL;
+		return -1;
+	}
+
+	buf = malloc(size);
+	if (buf == NULL) {
+		printf("Memory allocation failed.\n");
+		return -1;
+	}
+
+	if (fseek(in, offset, SEEK_SET)) {
+		perror(inpath);
+		free(buf);
+		return -1;
+	}
+
+	if (fread(buf, size, 1, in) <= 0) {
+		perror(inpath);
+		free(buf);
+		return -1;
+	}
+
+	out = fopen(outpath, "wb");
+	if (out == NULL) {
+		perror(outpath);
+		free(buf);
+		return -1;
+	}
+
+	if (fwrite(buf, size, 1, out) != 1) {
+		perror(outpath);
+		free(buf);
+		fclose(out);
+		return -1;
+	}
+
+	if (fclose(out)) {
+		perror(outpath);
+		free(buf);
+		return -1;
+	}
+
+	free(buf);
+
+	return size;
+}
+
 static int dumpParam(FILE *in, uint32_t param_offset, const char *inpath, const char *outpath)
 {
 	FILE *out;
@@ -438,10 +491,8 @@ static int dumpParam(FILE *in, uint32_t param_offset, const char *inpath, const 
 
 static int dumpStartdat(FILE *in, uint32_t psp_offset, const char *inpath, const char *outpath)
 {
-	FILE *out;
 	uint64_t magic;
 	uint32_t size;
-	void *buf;
 
 	if (in == NULL || inpath == NULL || outpath == NULL) {
 		errno = EINVAL;
@@ -471,50 +522,8 @@ static int dumpStartdat(FILE *in, uint32_t psp_offset, const char *inpath, const
 		return -1;
 	}
 
-	size = le32toh(size);
-
-	buf = malloc(size);
-	if (buf == NULL) {
-		perror(NULL);
-		return -1;
-	}
-
 	printf("Dumping STARTDAT...\n");
-	if (fseek(in, 56, SEEK_CUR)) {
-		perror(inpath);
-		free(buf);
-		return -1;
-	}
-
-	if (fread(buf, size, 1, in) <= 0) {
-		perror(inpath);
-		free(buf);
-		return -1;
-	}
-
-	out = fopen(outpath, "wb");
-	if (out == NULL) {
-		perror(outpath);
-		free(buf);
-		return -1;
-	}
-
-	if (fwrite(buf, size, 1, out) != 1) {
-		perror(outpath);
-		free(buf);
-		fclose(out);
-		return -1;
-	}
-
-	if (fclose(out)) {
-		perror(outpath);
-		free(buf);
-		return -1;
-	}
-
-	free(buf);
-
-	return size;
+	return dumpRaw(in, psp_offset + 1520, le32toh(size), inpath, outpath);
 }
 
 static int dumpOpnssmp(FILE *in, uint32_t psp_offset, const void *verKey, const char *inpath, const char *outpath)
