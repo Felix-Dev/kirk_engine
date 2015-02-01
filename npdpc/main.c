@@ -228,10 +228,11 @@ static int dumpKeys(const np_t *np)
 		return -1;
 	}
 
-	printf("NPUMDIMG Version Key: 0x");
+	printf("NPUMDIMG Keys:\n"
+		" Version Key: 0x");
 	for (i = 0; i < 16; i++)
 		printf("%02X", np->verKey[i]);
-	printf("\nNPUMDIMG Header Key:  0x");
+	printf("\n Header Key:  0x");
 	for (i = 0; i < 16; i++)
 		printf("%02X", np->hdrKey[i]);
 	putchar('\n');
@@ -489,7 +490,6 @@ static int dumpStartdat(FILE *in, uint32_t psp_offset, const char *inpath, const
 	if (fclose(out)) {
 		perror(outpath);
 		free(buf);
-		fclose(out);
 		return -1;
 	}
 
