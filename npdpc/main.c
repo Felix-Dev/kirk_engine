@@ -219,6 +219,25 @@ static void npClose(const np_t *np)
 		free(np->tbl);
 }
 
+static int dumpId(FILE *in, uint32_t psp_offset, const char *inpath)
+{
+	char s[40];
+
+	if (fseek(in, psp_offset + 1376, SEEK_SET)) {
+		perror(inpath);
+		return -1;
+	}
+
+	if (fgets(s, sizeof(s), in) <= 0) {
+		perror(inpath);
+		return -1;
+	}
+
+	printf("Content ID: %s\n", s);
+
+	return 0;
+}
+
 static int dumpKeys(const np_t *np)
 {
 	int i;
@@ -699,6 +718,12 @@ int main(int argc, char *argv[])
 			npClose(&np);
 			return errno;
 		}
+
+	if (dumpId(in, hdr.psp_offset, argv[1]) < 0) {
+		fclose(in);
+		npClose(&np);
+		return errno;
+	}
 
 	if (dumpKeys(&np) < 0) {
 		fclose(in);
