@@ -681,8 +681,9 @@ int main(int argc, char *argv[])
 {
 	pbpHdr hdr;
 	np_t np;
-	int ret;
 	FILE *in;
+	size_t size;
+	int ret;
 
 	if (argc < 2) {
 		printf("NP Decryptor for PC\n"
@@ -745,6 +746,51 @@ int main(int argc, char *argv[])
 		npClose(&np);
 		return errno;
 	}
+
+	printf("Dumping ICON0.PNG...\n");
+	size = hdr.icon1_offset - hdr.icon0_offset;
+	if (size)
+		if (dumpRaw(in, hdr.icon0_offset, size, argv[1], "ICON0.PNG") < 0) {
+			fclose(in);
+			npClose(&np);
+			return errno;
+		}
+
+	printf("Dumping ICON1.PMF...\n");
+	size = hdr.pic0_offset - hdr.icon1_offset;
+	if (size)
+		if (dumpRaw(in, hdr.icon1_offset, size, argv[1], "ICON1.PMF") < 0) {
+			fclose(in);
+			npClose(&np);
+			return errno;
+		}
+
+	printf("Dumping PIC0.PNG...\n");
+	size = hdr.pic1_offset - hdr.pic0_offset;
+	if (size)
+		if (dumpRaw(in, hdr.pic0_offset, size, argv[1], "PIC0.PNG") < 0) {
+			fclose(in);
+			npClose(&np);
+			return errno;
+		}
+
+	printf("Dumping PIC1.PNG...\n");
+	size = hdr.snd0_offset - hdr.pic1_offset;
+	if (size)
+		if (dumpRaw(in, hdr.pic1_offset, size, argv[1], "PIC1.PNG") < 0) {
+			fclose(in);
+			npClose(&np);
+			return errno;
+		}
+
+	printf("Dumping SND0.AT3...\n");
+	size = hdr.psp_offset - hdr.snd0_offset;
+	if (size)
+		if (dumpRaw(in, hdr.snd0_offset, size, argv[1], "SND0.AT3") < 0) {
+			fclose(in);
+			npClose(&np);
+			return errno;
+		}
 
 	if (dumpStartdat(in, hdr.psp_offset, argv[1], "STARTDAT.PNG") < 0) {
 		fclose(in);
