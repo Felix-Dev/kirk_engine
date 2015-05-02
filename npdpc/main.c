@@ -715,8 +715,11 @@ int main(int argc, char *argv[])
 	}
 
 	ret = npOpen(&np, in, hdr.psar_offset);
-	if(ret < 0) {
-		printf("%s: npOpen error %08x\n", argv[1], ret);
+	if (ret < 0) {
+		if (errno < 0)
+			printf("%s: npOpen error %08x\n", argv[1], ret);
+		else
+			perror(argv[1]);
 		fclose(in);
 		return ret;
 	}
