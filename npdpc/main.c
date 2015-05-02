@@ -30,10 +30,30 @@
 #include "pgd.c"
 #include "tlzrc.c"
 
-#define PBP_MAGIC htobe32(0x00504250) // "\0PBP"
-#define PSF_MAGIC htobe32(0x00505346) // "\0PSF"
-#define NPUMDIMG_MAGIC htobe64(0x4E50554D44494D47) // "NPUMDIMG"
-#define STARTDAT_MAGIC htobe64(0x5354415254444154) // "STARTDAT"
+
+
+#if (defined(__BYTE_ORDER__) && __BYTE_ORDER__ ==  __ORDER_BIG_ENDIAN__) || \
+	(defined(__BYTE_ORDER) && __BYTE_ORDER == __BIG_ENDIAN) || \
+	(defined(BYTE_ORDER) && BYTE_ORDER == BIG_ENDIAN)
+#define htot32
+#define htot64
+#else
+#ifdef __INTEL_COMPILER
+#define htot32(v) ((uint32_t)_bswap((int)(v)))
+#define htot64(v) ((uint64_t)_bswap64((__int64)(v)))
+#elif _MSC_VER >= 1400
+#define htot32(v) ((uint32_t)_byteswap_ulong((unsigned long)(v)))
+#define htot64(v) ((uint64_t)_byteswap_uint64((unsigned __int64)(v)))
+#else
+#define htot32 __builtin_bswap32
+#define htot64 __builtin_bswap64
+#endif
+#endif
+
+#define PBP_MAGIC htot32(0x00504250) // "\0PBP"
+#define PSF_MAGIC htot32(0x00505346) // "\0PSF"
+#define NPUMDIMG_MAGIC htot64(0x4E50554D44494D47) // "NPUMDIMG"
+#define STARTDAT_MAGIC htot64(0x5354415254444154) // "STARTDAT"
 
 enum {
 	SFO_FMT_UTF8S = 0,
