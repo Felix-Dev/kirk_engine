@@ -575,7 +575,7 @@ static int dumpOpnssmp(FILE *in, uint32_t psp_offset, const void *verKey, const 
 		return -1;
 	}
 
-	offset = le32toh(offset);
+	offset = le32toh(offset) + psp_offset;
 	size = le32toh(size);
 
 	buf = malloc(size);
