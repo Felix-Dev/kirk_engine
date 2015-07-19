@@ -341,7 +341,7 @@ static int dumpParam(FILE *in, uint32_t param_offset, const char *inpath, const 
 	long offset;
 	char buf[3168];
 	const char *p;
-	const char sfxHdr[] = "<?xml version=\"1\" encoding=\"utf-8\" standalone=\"yes\"?>\n"
+	const char sfxHdr[] = "<?xml version=\"1.0\" encoding=\"utf-8\" standalone=\"yes\"?>\n"
 		"<paramsfo add_hidden=\"false\">\n";
 	const char paramEnd[] = "</param>\n";
 	const char sfxFtr[] = "</paramsfo>\n";
